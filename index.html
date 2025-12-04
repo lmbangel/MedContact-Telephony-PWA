@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="OmniCall - Mobile Softphone PWA">
+  <title>OmniCall - Softphone</title>
+  <link rel="stylesheet" href="/src/styles/main.css">
+  <script src="https://unpkg.com/@twilio/voice-sdk@2.11.0/dist/twilio.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div id="app" class="min-h-screen flex items-center justify-center">
+
+    <!-- Incoming Call Screen -->
+    <div id="incoming-call-screen" class="phone-screen hidden">
+      <!-- Status Bar Spacer -->
+      <div class="h-8"></div>
+
+      <!-- Caller Info Section -->
+      <div class="flex-1 flex flex-col items-center justify-center space-y-8">
+        <!-- Caller Avatar -->
+        <div class="flex items-center justify-center">
+          <div class="w-32 h-32 rounded-full bg-white/10 backdrop-blur-sm border-2 border-white/20 flex items-center justify-center">
+            <svg class="w-24 h-24 text-white/80" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Caller Info -->
+        <div class="text-center text-white">
+          <h2 id="incoming-caller-name" class="text-3xl font-light mb-1">Your Name</h2>
+          <p id="incoming-caller-location" class="text-lg text-white/70">Italy</p>
+          <p id="incoming-caller-line1" class="text-base text-white/80 mt-2"></p>
+          <p id="incoming-caller-line2" class="text-sm text-white/60"></p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="w-full flex items-center justify-around px-8 pb-8">
+        <!-- Decline Button -->
+        <button id="decline-btn" class="w-20 h-20 rounded-full bg-call-decline hover:bg-red-600 flex items-center justify-center transition-all duration-200 shadow-lg hover:scale-105 active:scale-95" aria-label="Decline call">
+          <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" transform="rotate(135 12 12)"/>
+          </svg>
+        </button>
+
+        <!-- Accept Button -->
+        <button id="accept-btn" class="w-20 h-20 rounded-full bg-call-accept hover:bg-green-600 flex items-center justify-center transition-all duration-200 shadow-lg hover:scale-105 active:scale-95" aria-label="Accept call">
+          <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Outgoing Call Screen -->
+    <div id="outgoing-call-screen" class="phone-screen hidden">
+      <!-- Status Bar Spacer -->
+      <div class="h-8"></div>
+
+      <!-- Caller Info Section -->
+      <div class="flex-1 flex flex-col items-center justify-center space-y-8">
+        <!-- Caller Avatar -->
+        <div class="flex items-center justify-center">
+          <div class="w-32 h-32 rounded-full bg-white/10 backdrop-blur-sm border-2 border-white/20 flex items-center justify-center">
+            <svg class="w-24 h-24 text-white/80" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Caller Info -->
+        <div class="text-center text-white">
+          <h2 id="outgoing-caller-name" class="text-3xl font-light mb-1">Calling...</h2>
+          <p id="outgoing-caller-number" class="text-lg text-white/70">+1234567890</p>
+          <p id="outgoing-caller-line1" class="text-base text-white/80 mt-2"></p>
+          <p id="outgoing-caller-line2" class="text-sm text-white/60"></p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="w-full flex items-center justify-center px-8 pb-8">
+        <!-- End Call Button -->
+        <button id="cancel-call-btn" class="w-20 h-20 rounded-full bg-call-decline hover:bg-red-600 flex items-center justify-center transition-all duration-200 shadow-lg hover:scale-105 active:scale-95" aria-label="Cancel call">
+          <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" transform="rotate(135 12 12)"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Call Screen -->
+    <div id="active-call-screen" class="phone-screen hidden">
+      <div class="flex flex-col items-center justify-center h-full p-8">
+        <!-- Status Bar Spacer -->
+        <div class="h-8"></div>
+
+        <!-- Caller Info Section (Top) -->
+        <div class="flex flex-col items-center space-y-3 mb-8 pt-4">
+          <!-- Small Avatar -->
+          <div class="flex items-center justify-center">
+            <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border-2 border-white/20 flex items-center justify-center">
+              <svg class="w-12 h-12 text-white/80" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Caller Info -->
+          <div class="text-center text-white">
+            <h2 id="active-caller-name" class="text-xl font-light mb-1">Your Name</h2>
+            <p id="active-caller-location" class="text-sm text-white/70">Italy</p>
+            <p id="active-caller-line1" class="text-sm text-white/80"></p>
+            <p id="active-caller-line2" class="text-xs text-white/60"></p>
+          </div>
+
+          <!-- Call Duration -->
+          <div id="call-duration" class="text-white/70 text-sm mt-2">00:00</div>
+        </div>
+
+        <!-- Action Grid -->
+        <div class="flex-1 flex items-center w-full">
+          <div class="grid grid-cols-3 gap-4 px-8 w-full">
+            <!-- Contacts -->
+            <button class="action-btn" data-action="contacts">
+              <svg class="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+              </svg>
+              <span class="text-white text-xs">Contacts</span>
+            </button>
+
+            <!-- Add Call -->
+            <button class="action-btn" data-action="add-call">
+              <svg class="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              <span class="text-white text-xs">Add call</span>
+            </button>
+
+            <!-- Mute -->
+            <button class="action-btn" data-action="mute">
+              <svg class="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+              </svg>
+              <span class="text-white text-xs">Mute</span>
+            </button>
+
+            <!-- Hold -->
+            <button class="action-btn" data-action="hold">
+              <svg class="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span class="text-white text-xs">Hold</span>
+            </button>
+
+            <!-- Record -->
+            <button class="action-btn" data-action="record">
+              <svg class="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              <span class="text-white text-xs">Record</span>
+            </button>
+
+            <!-- Note -->
+            <button class="action-btn" data-action="note">
+              <svg class="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+              <span class="text-white text-xs">Note</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="w-full flex items-center justify-around px-8 pb-6">
+          <!-- Keypad Button -->
+          <button id="keypad-btn" class="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all duration-200">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+            </svg>
+          </button>
+
+          <!-- End Call Button -->
+          <button id="end-call-btn" class="w-16 h-16 rounded-full bg-call-decline hover:bg-red-600 flex items-center justify-center transition-all duration-200 shadow-lg hover:scale-105 active:scale-95">
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" transform="rotate(135 12 12)"/>
+            </svg>
+          </button>
+
+          <!-- Speaker Button -->
+          <button id="speaker-btn" class="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all duration-200">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Dialpad Overlay -->
+        <div id="dialpad-overlay" class="absolute bottom-0 left-0 right-0 hidden">
+          <div class="bg-gray-900/95 backdrop-blur-lg rounded-t-3xl p-6 animate-slide-up">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-white text-lg font-light">Dialpad</h3>
+              <button id="close-dialpad-btn" class="text-white/60 hover:text-white">✕</button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="1">1</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="2">2</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="3">3</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="4">4</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="5">5</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="6">6</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="7">7</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="8">8</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="9">9</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="*">*</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="0">0</button>
+              <button class="dialpad-digit w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="#">#</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Idle/Demo Screen -->
+    <div id="idle-screen" class="phone-screen">
+      <div class="flex flex-col h-full">
+        <!-- Top Bar -->
+        <div class="flex items-center justify-between p-4 border-b border-white/10">
+          <!-- Twilio Status -->
+          <div id="twilio-status" class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full bg-white/30" id="twilio-status-indicator"></div>
+            <span id="twilio-status-text" class="text-white/90 text-sm">Connecting...</span>
+          </div>
+
+          <!-- Profile Button -->
+          <button id="profile-btn" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all duration-200">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Profile Modal (Hidden by default) -->
+        <div id="profile-modal" class="hidden absolute top-0 left-0 right-0 bottom-0 bg-gray-900/95 backdrop-blur-lg z-50 flex items-start justify-center pt-20">
+          <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-6 w-80 border border-white/20">
+            <!-- Close Button -->
+            <div class="flex justify-end mb-4">
+              <button id="close-profile-btn" class="text-white/60 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Profile Info -->
+            <div class="flex flex-col items-center space-y-4">
+              <!-- Avatar -->
+              <div class="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center">
+                <svg class="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+
+              <!-- User Details -->
+              <div class="text-center">
+                <h3 id="profile-name" class="text-xl font-medium text-white mb-1">Agent Name</h3>
+                <p id="profile-company" class="text-sm text-white/70">Company Name</p>
+                <p id="profile-email" class="text-xs text-white/50 mt-2">email@example.com</p>
+              </div>
+
+              <!-- Logout Button -->
+              <button id="logout-btn" class="w-full mt-6 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all duration-200 flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col items-center justify-center p-8">
+          <div class="text-center space-y-6 max-w-sm w-full">
+            <!-- Twilio Connection Button (Hidden) -->
+            <button id="init-twilio-btn" class="hidden w-full px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-all duration-200 shadow-lg hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" viewBox="0 0 640 512" fill="currentColor">
+                <path d="M634.91 154.88C457.74-8.99 182.19-8.93 5.09 154.88c-6.66 6.16-6.79 16.59-.35 22.98l34.24 33.97c6.14 6.1 16.02 6.23 22.4.38 145.92-133.68 371.3-133.71 517.25 0 6.38 5.85 16.26 5.71 22.4-.38l34.24-33.97c6.43-6.39 6.3-16.82-.36-22.98zM320 352c-35.35 0-64 28.65-64 64s28.65 64 64 64 64-28.65 64-64-28.65-64-64-64zm202.67-83.59c-115.26-101.93-290.21-101.82-405.34 0-6.9 6.1-7.12 16.69-.57 23.15l34.44 33.99c6 5.92 15.66 6.32 22.05.8 83.95-72.57 209.74-72.41 293.49 0 6.39 5.52 16.05 5.13 22.05-.8l34.44-33.99c6.56-6.46 6.33-17.06-.56-23.15z"/>
+              </svg>
+              Connect to Twilio
+            </button>
+
+            <button id="show-dialpad-btn" class="w-full px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all duration-200 shadow-lg hover:scale-105 active:scale-95">
+              Make Outgoing Call
+            </button>
+
+            <p class="text-white/50 text-xs mt-4">
+              Ready to make and receive calls
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dialpad Screen -->
+    <div id="dialpad-screen" class="phone-screen hidden">
+      <div class="flex flex-col items-center justify-between h-full p-8">
+        <!-- Header with Back Button -->
+        <div class="w-full flex items-center justify-between pt-8 mb-4">
+          <button id="back-to-idle-btn" class="text-white/70 hover:text-white flex items-center">
+            <svg class="w-6 h-6 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back
+          </button>
+          <h1 class="text-2xl font-light text-white">Dial</h1>
+          <div class="w-16"></div> <!-- Spacer for centering -->
+        </div>
+
+        <!-- Dialpad Section -->
+        <div class="flex-1 flex flex-col items-center justify-center w-full max-w-sm space-y-6">
+          <!-- Number Display -->
+          <div class="w-full">
+            <input
+              id="number-display"
+              type="text"
+              value=""
+              placeholder="Enter number"
+              class="w-full px-4 py-3 bg-white/10 border-0 border-white/20 rounded-lg text-white text-center text-2xl placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/30"
+            >
+          </div>
+
+          <!-- Dialpad Grid -->
+          <div class="grid grid-cols-3 gap-3 w-full max-w-xs">
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="1">
+              <span>1</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="2">
+              <span>2</span>
+              <span class="text-xs text-white/50">ABC</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="3">
+              <span>3</span>
+              <span class="text-xs text-white/50">DEF</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="4">
+              <span>4</span>
+              <span class="text-xs text-white/50">GHI</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="5">
+              <span>5</span>
+              <span class="text-xs text-white/50">JKL</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="6">
+              <span>6</span>
+              <span class="text-xs text-white/50">MNO</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="7">
+              <span>7</span>
+              <span class="text-xs text-white/50">PQRS</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="8">
+              <span>8</span>
+              <span class="text-xs text-white/50">TUV</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto flex flex-col items-center justify-center" data-digit="9">
+              <span>9</span>
+              <span class="text-xs text-white/50">WXYZ</span>
+            </button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="*">*</button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="0">0</button>
+            <button class="idle-dialpad-digit w-20 h-20 rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl font-light transition-all duration-200 mx-auto" data-digit="#">#</button>
+          </div>
+
+          <!-- Action Buttons (Call and Backspace) -->
+          <div class="flex items-center justify-center gap-8">
+            <!-- Call Button -->
+            <button
+              id="dial-call-btn"
+              class="w-20 h-20 rounded-full bg-call-accept hover:bg-green-600 flex items-center justify-center transition-all duration-200 shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled
+            >
+              <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+              </svg>
+            </button>
+            <!-- Backspace Button (hidden when no numbers) -->
+            <button
+              id="backspace-icon-btn"
+              class="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all duration-200 hidden"
+              aria-label="Backspace"
+            >
+              <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H7.07L2.4 12l4.66-7H22v14zm-11.59-2L14 13.41 17.59 17 19 15.59 15.41 12 19 8.41 17.59 7 14 10.59 10.41 7 9 8.41 12.59 12 9 15.59z"/>
+              </svg>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- Bottom spacer -->
+        <div class="h-8"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

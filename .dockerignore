@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+.env
+.vscode
+__pycache__
+*.pyc
+*.db
+server/*.db
+prompts
+.claude

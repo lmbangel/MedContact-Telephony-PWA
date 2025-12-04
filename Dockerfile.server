@@ -1,0 +1,30 @@
+FROM golang:alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev sqlite-dev git
+
+# Copy go mod files
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY server/ ./
+
+# Build the application
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates sqlite-libs
+
+WORKDIR /root/
+
+# Copy the binary from builder
+COPY --from=builder /app/main .
+
+EXPOSE 3000
+
+CMD ["./main"]
