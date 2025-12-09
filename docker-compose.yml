@@ -1,15 +1,16 @@
 services:
-  backend:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.server
-    container_name: omnicall-backend
+      dockerfile: Dockerfile
+    container_name: omnicall-app
     ports:
       - "3000:3000"
     volumes:
-      - ./data:/root/data
+      - ./data:/app/data
     environment:
-      - DATABASE_PATH=/root/data/omnicall.db
+      - DATABASE_PATH=/app/data/omnicall.db
+      - PORT=3000
       # Twilio Configuration
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
@@ -25,17 +26,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: omnicall-frontend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - backend
-    restart: unless-stopped
 
 volumes:
   data:

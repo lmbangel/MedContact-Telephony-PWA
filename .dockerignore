@@ -1,13 +1,38 @@
+# Node
 node_modules
+.npm
+
+# Build artifacts (will be built in container)
 dist
+.vite
+
+# Git
 .git
 .gitignore
+
+# Documentation
 *.md
+
+# Environment files
 .env
+.env.*
+
+# Editor
 .vscode
+.idea
+.claude
+
+# Python
 __pycache__
 *.pyc
+
+# Database (will be created in container)
 *.db
-server/*.db
+
+# Development files
 prompts
-.claude
+Makefile
+
+# OS files
+.DS_Store
+Thumbs.db
