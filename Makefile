@@ -1,117 +1,81 @@
-.PHONY: help dev dev-backend dev-frontend build-frontend install clean-build docker-start docker-stop docker-restart docker-build docker-rebuild docker-logs docker-ps docker-clean
+.PHONY: help dev dev-api dev-app install-api install-app build-app clean
 
 # Default target
 help:
 	@echo "OmniCall - Available Commands:"
 	@echo ""
-	@echo "LOCAL DEVELOPMENT (recommended):"
-	@echo "  make dev              - Start both backend and frontend in dev mode"
-	@echo "  make dev-backend      - Start backend only (http://localhost:3000)"
-	@echo "  make dev-frontend     - Start frontend only (http://localhost:5173)"
-	@echo "  make build-frontend   - Build frontend for production"
-	@echo "  make install          - Install all dependencies"
-	@echo "  make clean-build      - Clean build artifacts"
+	@echo "LOCAL DEVELOPMENT:"
+	@echo "  make dev           - Start both API (8000) and App (3000)"
+	@echo "  make dev-api       - Start API only on port 8000"
+	@echo "  make dev-app       - Start frontend only on port 3000"
 	@echo ""
-	@echo "DOCKER DEVELOPMENT:"
-	@echo "  make docker-start     - Start all services with Docker"
-	@echo "  make docker-stop      - Stop all Docker services"
-	@echo "  make docker-restart   - Restart all Docker services"
-	@echo "  make docker-build     - Build Docker images"
-	@echo "  make docker-rebuild   - Rebuild Docker images from scratch"
-	@echo "  make docker-logs      - View Docker logs"
-	@echo "  make docker-ps        - Show running containers"
-	@echo "  make docker-clean     - Stop and remove all containers and volumes"
+	@echo "INSTALLATION:"
+	@echo "  make install-api   - Install API dependencies (Go)"
+	@echo "  make install-app   - Install App dependencies (npm)"
+	@echo ""
+	@echo "BUILD:"
+	@echo "  make build-app     - Build frontend for production"
+	@echo ""
+	@echo "DOCKER:"
+	@echo "  make docker-api    - Build and run API in Docker (port 8000)"
+	@echo "  make docker-app    - Build and run App in Docker (port 3000)"
+	@echo "  make docker-all    - Build and run both in Docker"
+	@echo "  make docker-stop   - Stop all Docker containers"
+	@echo ""
+	@echo "CLEANUP:"
+	@echo "  make clean         - Clean build artifacts"
 	@echo ""
 
-# ============================================
-# LOCAL DEVELOPMENT COMMANDS
-# ============================================
-
-# Install dependencies
-install:
-	@echo "Installing dependencies..."
-	@echo "Installing frontend dependencies..."
-	npm install
-	@echo "Installing backend dependencies..."
-	cd server && go mod download
-	@echo "Dependencies installed!"
-
-# Run both backend and frontend in development mode
+# Run both services
 dev:
-	@echo "Starting OmniCall in development mode..."
-	@echo "Backend will run on http://localhost:3000"
-	@echo "Frontend will run on http://localhost:5173"
+	@echo "Starting both API and App..."
+	@echo "API: http://localhost:8000"
+	@echo "App: http://localhost:3000"
 	@echo ""
-	@echo "Press Ctrl+C to stop both services"
-	@echo ""
-	@make -j2 dev-backend dev-frontend
+	@make -j2 dev-api dev-app
 
-# Start backend only
-dev-backend:
-	@echo "Starting backend server..."
-	@echo "Backend running on http://localhost:3000"
-	cd server && go run main.go
+# API (Backend)
+dev-api:
+	@echo "Starting API server on port 8000..."
+	cd api && go run main.go
 
-# Start frontend only
-dev-frontend:
-	@echo "Starting frontend dev server..."
-	@echo "Frontend running on http://localhost:5173"
-	npm run dev
+install-api:
+	@echo "Installing API dependencies..."
+	cd api && go mod download
 
-# Build frontend for production
-build-frontend:
-	@echo "Building frontend for production..."
-	npm run build
-	@echo "Frontend built to ./dist"
+# App (Frontend)
+dev-app:
+	@echo "Starting App dev server on port 3000..."
+	cd app && npm run dev
 
-# Clean build artifacts
-clean-build:
-	@echo "Cleaning build artifacts..."
-	rm -rf dist
-	rm -rf node_modules/.vite
-	@echo "Build artifacts cleaned!"
+install-app:
+	@echo "Installing App dependencies..."
+	cd app && npm install
 
-# ============================================
-# DOCKER DEVELOPMENT COMMANDS
-# ============================================
+build-app:
+	@echo "Building App for production..."
+	cd app && npm run build
 
-# Start all services with Docker
-docker-start:
-	@echo "Starting all services with Docker..."
-	docker-compose up -d
+# Docker commands
+docker-api:
+	@echo "Building and running API in Docker..."
+	cd api && docker build -t omnicall-api . && docker run -p 8000:8000 --name omnicall-api-container omnicall-api
 
-# Stop all Docker services
+docker-app:
+	@echo "Building and running App in Docker..."
+	cd app && docker build -t omnicall-app . && docker run -p 3000:3000 --name omnicall-app-container omnicall-app
+
+docker-all:
+	@echo "Building and running both services in Docker..."
+	@make -j2 docker-api docker-app
+
 docker-stop:
-	@echo "Stopping all Docker services..."
-	docker-compose down
+	@echo "Stopping Docker containers..."
+	docker stop omnicall-api-container omnicall-app-container 2>/dev/null || true
+	docker rm omnicall-api-container omnicall-app-container 2>/dev/null || true
 
-# Restart all Docker services
-docker-restart:
-	@echo "Restarting all Docker services..."
-	docker-compose restart
-
-# Build Docker images
-docker-build:
-	@echo "Building Docker images..."
-	docker-compose build
-
-# Rebuild Docker images from scratch
-docker-rebuild:
-	@echo "Rebuilding Docker images from scratch..."
-	docker-compose build --no-cache
-
-# View Docker logs
-docker-logs:
-	@echo "Showing Docker logs (Ctrl+C to exit)..."
-	docker-compose logs -f
-
-# Show running containers
-docker-ps:
-	@echo "Running containers:"
-	docker-compose ps
-
-# Clean everything (Docker)
-docker-clean:
-	@echo "Stopping and removing all containers, networks, and volumes..."
-	docker-compose down -v
-	@echo "Docker cleanup done!"
+# Cleanup
+clean:
+	@echo "Cleaning build artifacts..."
+	rm -rf app/dist app/node_modules
+	@echo "Done!"

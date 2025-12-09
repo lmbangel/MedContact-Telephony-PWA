@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"omnicall/db"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -148,16 +146,12 @@ func main() {
 	r.Post("/twilio/incoming-call", server.handleIncomingCall)
 	r.Get("/twilio/incoming-call", server.handleIncomingCall)
 
-	// Serve static files from dist directory
-	distDir := "./dist"
-	r.Get("/*", server.serveStatic(distDir))
-
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3000"
+		port = "8000"
 	}
 
-	fmt.Printf("\n🚀 OmniCall Server running on http://localhost:%s\n", port)
+	fmt.Printf("\n🚀 OmniCall API Server running on http://localhost:%s\n", port)
 	fmt.Println("📊 Health check: http://localhost:" + port + "/health")
 	fmt.Println("🔐 Auth API: http://localhost:" + port + "/api/auth")
 	fmt.Println("🏢 Companies API: http://localhost:" + port + "/api/companies")
@@ -698,50 +692,4 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(ErrorResponse{Detail: message})
-}
-
-// serveStatic serves static files and handles SPA routing
-func (s *Server) serveStatic(distDir string) http.HandlerFunc {
-	fileServer := http.FileServer(http.Dir(distDir))
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-
-		// Check if file exists
-		fullPath := filepath.Join(distDir, path)
-
-		// Check if it's a file that exists
-		if info, err := os.Stat(fullPath); err == nil {
-			if !info.IsDir() {
-				// Serve the file directly
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		// Handle HTML pages
-		if strings.HasSuffix(path, ".html") || path == "/" || path == "/index.html" {
-			http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
-			return
-		}
-
-		if path == "/login" || path == "/login.html" {
-			http.ServeFile(w, r, filepath.Join(distDir, "login.html"))
-			return
-		}
-
-		if path == "/register" || path == "/register.html" {
-			http.ServeFile(w, r, filepath.Join(distDir, "register.html"))
-			return
-		}
-
-		// For all other routes (SPA fallback), serve index.html
-		if !strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/twilio/") && !strings.Contains(path, ".") {
-			http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
-			return
-		}
-
-		// Try to serve the file
-		fileServer.ServeHTTP(w, r)
-	}
 }

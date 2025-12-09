@@ -1,96 +1,54 @@
-# MedContact-Telephony-PWA
-A telephony/ softphone application used by medical services providers. I allows agents to talk to , assist and engage with customers in a simple way.
+# OmniCall - Telephony PWA
 
-# 📞 MedContact
+A modern telephony Progressive Web App with Twilio integration, featuring a clean separation between frontend and backend.
 
-**A modern telephony and patient-communication app for medical practices.**
+## Architecture
 
-MedContact helps clinics, doctors, and healthcare teams manage calls, patients, and appointments in one easy-to-use dashboard.
-It replaces messy call logs, manual note-taking, and scattered patient communication with a clean, organised system.
+- **Frontend** (`app/`): Vite + Vanilla JavaScript - Port 3000
+- **Backend** (`api/`): Go API with SQLite - Port 8000
 
----
+## Quick Start
 
-## 🩺 What MedContact Does
+### Prerequisites
 
-### 📞 **Manages All Incoming & Outgoing Calls**
+- **Node.js** (v20+) - [Download](https://nodejs.org/)
+- **Go** (v1.21+) - [Download](https://go.dev/dl/)
+- **Make** (optional, for convenience commands)
 
-* Tracks every call your practice receives
-* Identifies missed calls
-* Records call outcomes (answered, voicemail, callback, etc.)
-* Allows staff to add notes for every call
-* Connects calls to the correct patient profile
+### Installation
 
----
+\`\`\`bash
+# Install frontend dependencies
+cd app && npm install && cd ..
 
-### 👩‍⚕️ **Organises Your Patients**
+# Install backend dependencies
+cd api && go mod download && cd ..
+\`\`\`
 
-* Full directory of patients
-* Quick search by name, phone number, or email
-* Patient profiles that show past calls and notes
-* Helps your team follow up properly and consistently
+### Development
 
----
+**Run both services:**
+\`\`\`bash
+make dev
+\`\`\`
 
-### 📅 **Simplifies Appointments**
+**Or run separately:**
 
-* Lets staff schedule, reschedule, or cancel appointments
-* Shows the day’s upcoming appointments
-* Helps reduce no-shows with clearer communication
+Terminal 1 (Backend):
+\`\`\`bash
+make dev-api
+# or: cd api && go run main.go
+\`\`\`
 
----
+Terminal 2 (Frontend):
+\`\`\`bash
+make dev-app
+# or: cd app && npm run dev
+\`\`\`
 
-### 📊 **Gives You a Simple, Useful Dashboard**
+**Access:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Health Check: http://localhost:8000/health
 
-At a glance, you can see:
-
-* Total patients
-* Calls for the day
-* Missed calls
-* Appointments scheduled today
-* Basic activity insights for your practice
-
----
-
-### 👥 **Supports Different Staff Roles**
-
-MedContact works for teams of any size:
-
-* Admins
-* Doctors
-* Receptionists
-  Each role sees exactly what they need and nothing more.
-
----
-
-## 💡 Why It Exists
-
-Medical practices are busy.
-Phones ring constantly.
-Patients get missed.
-Notes get lost.
-And follow-ups fall through the cracks.
-
-MedContact was built to solve that problem:
-
-* No more forgetting to call a patient back
-* No more “I don’t know who spoke to them last”
-* No more scattered information
-* Just one place where everything is tracked and easy to find
-
----
-
-## 🎯 Who This App Is For
-
-* GP practices
-* Specialists
-* Small to medium clinics
-* Telehealth teams
-* After-hours medical services
-
-Basically, if your practice receives calls from patients — MedContact helps you stay organised.
-
----
-
-## ⭐ Vision
-
-To give every medical practice a simple, powerful communication tool that improves patient experience and makes staff workflows easier.
+For full documentation, see [DEPLOYMENT.md](./DEPLOYMENT.md).
