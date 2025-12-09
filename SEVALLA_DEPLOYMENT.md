@@ -30,13 +30,30 @@ git push origin main
 
 ### 3. Configure Build Settings
 
-Sevalla should auto-detect the Dockerfile. If it doesn't:
+**IMPORTANT**: By default, Sevalla uses Nixpacks auto-detection. You MUST configure it to use Dockerfile instead.
 
-- **Build Method**: Dockerfile
-- **Dockerfile Path**: `./Dockerfile`
-- **Port**: 3000
+In your Sevalla application settings:
 
-### 4. Set Environment Variables
+1. Go to **Settings** > **Build Configuration**
+2. Change **Build Method** from "Nixpacks" to **"Dockerfile"**
+3. Set **Dockerfile Path**: `./Dockerfile`
+4. Set **Port**: `3000`
+
+Alternatively, the `nixpacks.toml` file in the repository will help guide Sevalla, but you still need to select Dockerfile as the build method in the dashboard.
+
+### 4. Configure Persistent Storage
+
+Since your app uses SQLite, you need persistent storage:
+
+1. In Sevalla dashboard, go to your application settings
+2. Find "Persistent Disk" or "Volumes" section
+3. Add a persistent volume:
+   - **Mount Path**: `/app/data`
+   - **Size**: 1GB (or as needed)
+
+This ensures your database persists across deployments.
+
+### 5. Set Environment Variables
 
 In your Sevalla application settings, add these environment variables:
 
@@ -54,18 +71,6 @@ PORT=3000
 
 **Important**: Replace all `your_*` values with your actual credentials.
 
-### 5. Configure Persistent Storage
-
-Since your app uses SQLite, you need persistent storage:
-
-1. In Sevalla dashboard, go to your application settings
-2. Find "Persistent Disk" or "Volumes" section
-3. Add a persistent volume:
-   - **Mount Path**: `/app/data`
-   - **Size**: 1GB (or as needed)
-
-This ensures your database persists across deployments.
-
 ### 6. Deploy
 
 Click "Deploy" in your Sevalla dashboard. Sevalla will:
@@ -76,14 +81,23 @@ Click "Deploy" in your Sevalla dashboard. Sevalla will:
 4. Create a production Docker image
 5. Deploy and start your application
 
-### 7. Access Your Application
+### 7. Verify Build Output
+
+Watch the build logs. You should see:
+- "Stage 1: Build Frontend"
+- "Stage 2: Build Backend"
+- "Stage 3: Final Production Image"
+
+If you see only Nixpacks output, go back to step 3 and ensure Dockerfile is selected.
+
+### 8. Access Your Application
 
 Once deployed, Sevalla will provide you with a URL like:
 ```
 https://your-app-name.sevalla.app
 ```
 
-### 8. Update Twilio Webhook URLs
+### 9. Update Twilio Webhook URLs
 
 After deployment, update your Twilio webhooks to point to your Sevalla URL:
 
