@@ -5,12 +5,19 @@
 Your deployment is failing because Sevalla is using **Nixpacks** (auto-detection) which only detects Node.js. Your app needs **both Node.js AND Go**, so you must use the Dockerfile.
 
 ## What You Saw
+
+**Error 1: Using Nixpacks instead of Dockerfile**
 ```
 📦 Building docker image using nixpacks...
 ╔════════ Nixpacks v1.41.0 ═══════╗
 ║ setup      │ nodejs_18, npm-9_x ║  ← Only Node.js detected!
 ║─────────────────────────────────║
 ║ install    │ npm ci             ║
+```
+
+**Error 2: Binary not found**
+```
+/bin/bash: line 1: ./main: No such file or directory
 ```
 
 ## How to Fix (2 Steps)
@@ -28,11 +35,16 @@ Your deployment is failing because Sevalla is using **Nixpacks** (auto-detection
 ### Step 2: Push Updated Code
 
 ```bash
-# Commit the new configuration file
-git add nixpacks.toml SEVALLA_DEPLOYMENT.md SEVALLA_QUICK_FIX.md
-git commit -m "Configure Sevalla to use Dockerfile"
+# Commit the new configuration files
+git add .
+git commit -m "Fix Sevalla deployment: use Dockerfile with proper binary path"
 git push origin main
 ```
+
+**New files added:**
+- `Procfile` - Tells Sevalla how to start the app
+- `sevalla.yaml` - Sevalla configuration file
+- Updated `Dockerfile` - Uses absolute path `/app/main` instead of `./main`
 
 ### Step 3: Redeploy
 

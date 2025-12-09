@@ -59,4 +59,4 @@ EXPOSE 3000
 ENV DATABASE_PATH=/app/data/omnicall.db
 
 # Run the application
-CMD ["./main"]
+CMD ["/app/main"]

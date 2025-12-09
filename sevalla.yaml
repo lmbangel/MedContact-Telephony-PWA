@@ -1,0 +1,10 @@
+buildMethod: dockerfile
+dockerfilePath: ./Dockerfile
+port: 3000
+
+healthCheck:
+  path: /health
+  port: 3000
+
+run:
+  command: /app/main
