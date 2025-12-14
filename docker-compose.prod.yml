@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # Reverse proxy with TLS termination
   nginx-proxy:
