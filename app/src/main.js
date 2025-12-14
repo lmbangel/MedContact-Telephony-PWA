@@ -523,7 +523,7 @@ async function handleInitTwilio() {
     }
 
     // Fetch Twilio access token from backend
-    const response = await fetch('http://localhost:3000/api/twilio/token', {
+    const response = await fetch('/api/twilio/token', {
       method: 'GET',
       credentials: 'include',
       headers: {

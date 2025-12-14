@@ -265,6 +265,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   7 * 24 * 60 * 60,
 		HttpOnly: true,
+		Secure:   false, // Set to true in production with HTTPS
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -323,6 +324,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   7 * 24 * 60 * 60,
 		HttpOnly: true,
+		Secure:   false, // Set to true in production with HTTPS
 		SameSite: http.SameSiteLaxMode,
 	})
 

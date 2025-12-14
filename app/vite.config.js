@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 export default defineConfig({
+  base: '/app/',
   root: '.',
   build: {
     outDir: 'dist',
@@ -25,7 +26,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false,
+        cookieDomainRewrite: 'localhost'
       }
     }
   }

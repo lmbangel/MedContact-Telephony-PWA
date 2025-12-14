@@ -1,0 +1,86 @@
+version: '3.9'
+
+services:
+  # Reverse proxy with TLS termination
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: medcontact-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - ./docker/dhparam.pem:/etc/nginx/dhparam.pem:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - medcontact
+
+  # Go API Backend
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: medcontact-api
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      DATABASE_PATH: /app/data/omnicall.db
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_API_KEY_SID: ${TWILIO_API_KEY_SID}
+      TWILIO_API_KEY_SECRET: ${TWILIO_API_KEY_SECRET}
+      TWILIO_TWIML_APP_SID: ${TWILIO_TWIML_APP_SID}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - shared-data:/app/data
+    expose:
+      - "8000"
+    networks:
+      - medcontact
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Vite Frontend (built and served by nginx)
+  frontend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: medcontact-frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - medcontact
+
+  # Placeholder for Laravel Dashboard (future)
+  # dashboard:
+  #   build:
+  #     context: ./dashboard
+  #     dockerfile: Dockerfile
+  #   container_name: medcontact-dashboard
+  #   restart: unless-stopped
+  #   expose:
+  #     - "9000"
+  #   networks:
+  #     - medcontact
+
+networks:
+  medcontact:
+    driver: bridge
+
+volumes:
+  shared-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/data
