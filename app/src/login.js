@@ -8,7 +8,7 @@ import { authService } from './js/services/AuthService.js';
 authService.init().then(() => {
   // If already authenticated, redirect to main app
   if (authService.isAuthenticated()) {
-    window.location.href = '/';
+    window.location.href = '/app/';
   }
 });
 
@@ -35,7 +35,7 @@ loginForm.addEventListener('submit', async (e) => {
 
     if (result.success) {
       // Redirect to main app
-      window.location.href = '/';
+      window.location.href = '/app/';
     } else {
       // Show error
       errorMessage.textContent = result.error || 'Failed to login';

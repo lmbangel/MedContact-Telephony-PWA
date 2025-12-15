@@ -3,6 +3,12 @@
 .env.*
 !.env.example
 
+# Local development data
+data/
+*.db
+*.db-shm
+*.db-wal
+
 # Editor
 .vscode
 .idea
@@ -22,3 +28,6 @@ dist
 
 # Old files
 *.old
+docker
+app/node_modules
+.claude

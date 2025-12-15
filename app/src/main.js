@@ -12,7 +12,7 @@ import { customerService } from './js/services/CustomerService.js';
 // Check authentication before initializing
 authService.init().then(() => {
   if (!authService.isAuthenticated()) {
-    window.location.href = '/login.html';
+    window.location.href = '/app/login.html';
     return;
   }
 
@@ -475,7 +475,7 @@ function updateDialButtonState() {
  */
 function handleLogout() {
   authService.logout();
-  window.location.href = '/login.html';
+  window.location.href = '/app/login.html';
 }
 
 /**
