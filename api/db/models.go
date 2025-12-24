@@ -9,25 +9,40 @@ import (
 	"time"
 )
 
-type CallTranscription struct {
-	ID         int64          `json:"id"`
-	CustomerID int64          `json:"customer_id"`
-	AgentID    int64          `json:"agent_id"`
-	CallSid    sql.NullString `json:"call_sid"`
-	Transcript string         `json:"transcript"`
-	Summary    sql.NullString `json:"summary"`
+type AgentStatus struct {
+	ID        int32        `json:"id"`
+	UserID    int32        `json:"user_id"`
+	Status    string       `json:"status"`
+	CreatedAt sql.NullTime `json:"created_at"`
+}
+
+type CallNote struct {
+	ID         int32          `json:"id"`
+	CallID     sql.NullInt32  `json:"call_id"`
+	AgentID    int32          `json:"agent_id"`
+	CustomerID sql.NullInt32  `json:"customer_id"`
+	Outcome    sql.NullString `json:"outcome"`
+	Notes      sql.NullString `json:"notes"`
 	CreatedAt  sql.NullTime   `json:"created_at"`
 }
 
+type CallOutcome struct {
+	ID        int32          `json:"id"`
+	Name      string         `json:"name"`
+	Category  sql.NullString `json:"category"`
+	IsActive  sql.NullBool   `json:"is_active"`
+	CreatedAt sql.NullTime   `json:"created_at"`
+}
+
 type Company struct {
-	ID        int64        `json:"id"`
+	ID        int32        `json:"id"`
 	Name      string       `json:"name"`
 	CreatedAt sql.NullTime `json:"created_at"`
 }
 
 type Customer struct {
-	ID                 int64          `json:"id"`
-	CompanyID          int64          `json:"company_id"`
+	ID                 int32          `json:"id"`
+	CompanyID          int32          `json:"company_id"`
 	FirstName          string         `json:"first_name"`
 	LastName           string         `json:"last_name"`
 	Email              sql.NullString `json:"email"`
@@ -39,27 +54,80 @@ type Customer struct {
 }
 
 type CustomerPremium struct {
-	ID            int64        `json:"id"`
-	CustomerID    int64        `json:"customer_id"`
-	PremiumAmount float64      `json:"premium_amount"`
+	ID            int32        `json:"id"`
+	CustomerID    int32        `json:"customer_id"`
+	PremiumAmount string       `json:"premium_amount"`
 	EffectiveDate time.Time    `json:"effective_date"`
 	CreatedAt     sql.NullTime `json:"created_at"`
 }
 
+type MemberFlag struct {
+	ID         int32          `json:"id"`
+	CustomerID int32          `json:"customer_id"`
+	FlagType   string         `json:"flag_type"`
+	FlagValue  sql.NullString `json:"flag_value"`
+	CreatedAt  sql.NullTime   `json:"created_at"`
+}
+
+type OtpCode struct {
+	ID        int32        `json:"id"`
+	Email     string       `json:"email"`
+	OtpCode   string       `json:"otp_code"`
+	ExpiresAt time.Time    `json:"expires_at"`
+	Used      sql.NullBool `json:"used"`
+	CreatedAt sql.NullTime `json:"created_at"`
+}
+
 type Session struct {
 	ID        string       `json:"id"`
-	UserID    int64        `json:"user_id"`
+	UserID    int32        `json:"user_id"`
 	CreatedAt sql.NullTime `json:"created_at"`
 	ExpiresAt time.Time    `json:"expires_at"`
 }
 
+type Task struct {
+	ID          int32          `json:"id"`
+	AssignedTo  int32          `json:"assigned_to"`
+	CustomerID  sql.NullInt32  `json:"customer_id"`
+	CallID      sql.NullInt32  `json:"call_id"`
+	Title       string         `json:"title"`
+	Description sql.NullString `json:"description"`
+	Type        sql.NullString `json:"type"`
+	Status      sql.NullString `json:"status"`
+	DueDate     sql.NullTime   `json:"due_date"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+}
+
+type Transcription struct {
+	ID                 int32          `json:"id"`
+	CustomerID         sql.NullInt32  `json:"customer_id"`
+	AgentID            sql.NullInt32  `json:"agent_id"`
+	CompanyID          int32          `json:"company_id"`
+	CallSid            string         `json:"call_sid"`
+	RecordingSid       sql.NullString `json:"recording_sid"`
+	RecordingUrl       sql.NullString `json:"recording_url"`
+	RecordingDuration  sql.NullInt32  `json:"recording_duration"`
+	RecordingStatus    sql.NullString `json:"recording_status"`
+	RecordingChannels  sql.NullInt32  `json:"recording_channels"`
+	RecordingStartTime sql.NullTime   `json:"recording_start_time"`
+	Transcript         sql.NullString `json:"transcript"`
+	Summary            sql.NullString `json:"summary"`
+	FromNumber         sql.NullString `json:"from_number"`
+	ToNumber           sql.NullString `json:"to_number"`
+	CallStatus         sql.NullString `json:"call_status"`
+	Duration           sql.NullInt32  `json:"duration"`
+	CallReason         sql.NullString `json:"call_reason"`
+	TranscriptionText  sql.NullString `json:"transcription_text"`
+	CreatedAt          sql.NullTime   `json:"created_at"`
+}
+
 type User struct {
-	ID           int64        `json:"id"`
+	ID           int32        `json:"id"`
 	Email        string       `json:"email"`
 	PasswordHash string       `json:"password_hash"`
 	Firstname    string       `json:"firstname"`
 	Lastname     string       `json:"lastname"`
 	AgentID      string       `json:"agent_id"`
-	CompanyID    int64        `json:"company_id"`
+	CompanyID    int32        `json:"company_id"`
 	CreatedAt    sql.NullTime `json:"created_at"`
 }

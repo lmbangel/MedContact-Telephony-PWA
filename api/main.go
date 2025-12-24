@@ -10,13 +10,14 @@ import (
 	"net/http"
 	"omnicall/db"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
-	_ "github.com/mattn/go-sqlite3"
 	twilioJwt "github.com/twilio/twilio-go/client/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -46,9 +47,9 @@ type CompanyCreate struct {
 }
 
 type AuthResponse struct {
-	Success   bool        `json:"success"`
-	User      *db.User    `json:"user,omitempty"`
-	SessionID string      `json:"sessionId,omitempty"`
+	Success   bool     `json:"success"`
+	User      *db.User `json:"user,omitempty"`
+	SessionID string   `json:"sessionId,omitempty"`
 }
 
 type UserResponse struct {
@@ -86,23 +87,40 @@ func main() {
 		log.Println("No .env file found, using environment variables")
 	}
 
-	// Get database path from env or use default
-	dbPath := os.Getenv("DATABASE_PATH")
-	if dbPath == "" {
-		dbPath = "./omnicall.db"
+	// Build MySQL DSN from environment variables
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+
+	// Validate required MySQL credentials
+	if dbHost == "" || dbPort == "" || dbName == "" || dbUser == "" || dbPassword == "" {
+		log.Fatal("Missing required database environment variables")
 	}
 
+	// Build MySQL DSN: username:password@tcp(host:port)/dbname?params
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
+		dbUser, dbPassword, dbHost, dbPort, dbName)
+
 	// Initialize database
-	database, err := sql.Open("sqlite3", dbPath)
+	database, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
 	defer database.Close()
 
-	// Initialize schema
-	if err := initSchema(database); err != nil {
-		log.Fatal("Failed to initialize schema:", err)
+	// Test the connection
+	if err := database.Ping(); err != nil {
+		log.Fatal("Failed to connect to database:", err)
 	}
+
+	log.Printf("Connected to MySQL at %s:%s", dbHost, dbPort)
+
+	// Schema initialization not needed - MySQL database already has schema
+	// if err := initSchema(database); err != nil {
+	// 	log.Fatal("Failed to initialize schema:", err)
+	// }
 
 	queries := db.New(database)
 	server := &Server{db: database, queries: queries}
@@ -160,38 +178,6 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
-func initSchema(database *sql.DB) error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS companies (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL UNIQUE,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-
-	CREATE TABLE IF NOT EXISTS users (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		email TEXT NOT NULL UNIQUE,
-		password_hash TEXT NOT NULL,
-		firstname TEXT NOT NULL,
-		lastname TEXT NOT NULL,
-		agent_id TEXT NOT NULL UNIQUE,
-		company_id INTEGER NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (company_id) REFERENCES companies (id)
-	);
-
-	CREATE TABLE IF NOT EXISTS sessions (
-		id TEXT PRIMARY KEY,
-		user_id INTEGER NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		expires_at DATETIME NOT NULL,
-		FOREIGN KEY (user_id) REFERENCES users (id)
-	);
-	`
-	_, err := database.Exec(schema)
-	return err
-}
-
 // Handlers
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -231,16 +217,30 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user
-	user, err := s.queries.CreateUser(r.Context(), db.CreateUserParams{
+	result, err := s.queries.CreateUser(r.Context(), db.CreateUserParams{
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
 		Firstname:    req.Firstname,
 		Lastname:     req.Lastname,
 		AgentID:      req.AgentID,
-		CompanyID:    req.CompanyID,
+		CompanyID:    int32(req.CompanyID),
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create user")
+		return
+	}
+
+	// Get the inserted user ID
+	userID, err := result.LastInsertId()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get user ID")
+		return
+	}
+
+	// Fetch the created user
+	user, err := s.queries.GetUserByID(r.Context(), int32(userID))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get user")
 		return
 	}
 
@@ -248,13 +248,20 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	sessionID := generateSessionID()
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	session, err := s.queries.CreateSession(r.Context(), db.CreateSessionParams{
+	_, err = s.queries.CreateSession(r.Context(), db.CreateSessionParams{
 		ID:        sessionID,
 		UserID:    user.ID,
 		ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create session")
+		return
+	}
+
+	// Fetch the created session
+	session, err := s.queries.GetSession(r.Context(), sessionID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get session")
 		return
 	}
 
@@ -307,13 +314,20 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	sessionID := generateSessionID()
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	session, err := s.queries.CreateSession(r.Context(), db.CreateSessionParams{
+	_, err = s.queries.CreateSession(r.Context(), db.CreateSessionParams{
 		ID:        sessionID,
 		UserID:    user.ID,
 		ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create session")
+		return
+	}
+
+	// Fetch the created session
+	session, err := s.queries.GetSession(r.Context(), sessionID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get session")
 		return
 	}
 
@@ -398,9 +412,17 @@ func (s *Server) getCompanies(w http.ResponseWriter, r *http.Request) {
 
 	// Create default company if none exist
 	if len(companies) == 0 {
-		company, err := s.queries.CreateCompany(r.Context(), "Default Company")
+		result, err := s.queries.CreateCompany(r.Context(), "Default Company")
 		if err == nil {
-			companies = append(companies, company)
+			// Get the inserted company ID
+			companyID, err := result.LastInsertId()
+			if err == nil {
+				// Fetch the created company
+				company, err := s.queries.GetCompany(r.Context(), int32(companyID))
+				if err == nil {
+					companies = append(companies, company)
+				}
+			}
 		}
 	}
 
@@ -423,13 +445,29 @@ func (s *Server) createCompany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	company, err := s.queries.CreateCompany(r.Context(), req.Name)
+	result, err := s.queries.CreateCompany(r.Context(), req.Name)
 	if err != nil {
-		if err.Error() == "UNIQUE constraint failed: companies.name" {
+		// MySQL unique constraint error contains "Duplicate entry"
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "Duplicate entry") || strings.Contains(errMsg, "duplicate key") {
 			respondError(w, http.StatusBadRequest, "Company with this name already exists")
 		} else {
 			respondError(w, http.StatusInternalServerError, "Failed to create company")
 		}
+		return
+	}
+
+	// Get the inserted company ID
+	companyID, err := result.LastInsertId()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get company ID")
+		return
+	}
+
+	// Fetch the created company
+	company, err := s.queries.GetCompany(r.Context(), int32(companyID))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get company")
 		return
 	}
 

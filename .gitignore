@@ -31,3 +31,4 @@ dist
 docker
 app/node_modules
 .claude
+.docs

@@ -11,24 +11,21 @@ import (
 	"time"
 )
 
-const createCompany = `-- name: CreateCompany :one
-INSERT INTO companies (name) VALUES (?) RETURNING id, name, created_at
+const createCompany = `-- name: CreateCompany :execresult
+INSERT INTO companies (name) VALUES (?)
 `
 
-func (q *Queries) CreateCompany(ctx context.Context, name string) (Company, error) {
-	row := q.db.QueryRowContext(ctx, createCompany, name)
-	var i Company
-	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
-	return i, err
+func (q *Queries) CreateCompany(ctx context.Context, name string) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createCompany, name)
 }
 
-const createCustomer = `-- name: CreateCustomer :one
+const createCustomer = `-- name: CreateCustomer :execresult
 INSERT INTO customers (company_id, first_name, last_name, email, phone, medical_aid_provider, medical_aid_number, medical_plan)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, company_id, first_name, last_name, email, phone, medical_aid_provider, medical_aid_number, medical_plan, created_at
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateCustomerParams struct {
-	CompanyID          int64          `json:"company_id"`
+	CompanyID          int32          `json:"company_id"`
 	FirstName          string         `json:"first_name"`
 	LastName           string         `json:"last_name"`
 	Email              sql.NullString `json:"email"`
@@ -38,8 +35,8 @@ type CreateCustomerParams struct {
 	MedicalPlan        sql.NullString `json:"medical_plan"`
 }
 
-func (q *Queries) CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error) {
-	row := q.db.QueryRowContext(ctx, createCustomer,
+func (q *Queries) CreateCustomer(ctx context.Context, arg CreateCustomerParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createCustomer,
 		arg.CompanyID,
 		arg.FirstName,
 		arg.LastName,
@@ -49,72 +46,41 @@ func (q *Queries) CreateCustomer(ctx context.Context, arg CreateCustomerParams) 
 		arg.MedicalAidNumber,
 		arg.MedicalPlan,
 	)
-	var i Customer
-	err := row.Scan(
-		&i.ID,
-		&i.CompanyID,
-		&i.FirstName,
-		&i.LastName,
-		&i.Email,
-		&i.Phone,
-		&i.MedicalAidProvider,
-		&i.MedicalAidNumber,
-		&i.MedicalPlan,
-		&i.CreatedAt,
-	)
-	return i, err
 }
 
-const createCustomerPremium = `-- name: CreateCustomerPremium :one
+const createCustomerPremium = `-- name: CreateCustomerPremium :execresult
 INSERT INTO customer_premiums (customer_id, premium_amount, effective_date)
-VALUES (?, ?, ?) RETURNING id, customer_id, premium_amount, effective_date, created_at
+VALUES (?, ?, ?)
 `
 
 type CreateCustomerPremiumParams struct {
-	CustomerID    int64     `json:"customer_id"`
-	PremiumAmount float64   `json:"premium_amount"`
+	CustomerID    int32     `json:"customer_id"`
+	PremiumAmount string    `json:"premium_amount"`
 	EffectiveDate time.Time `json:"effective_date"`
 }
 
-func (q *Queries) CreateCustomerPremium(ctx context.Context, arg CreateCustomerPremiumParams) (CustomerPremium, error) {
-	row := q.db.QueryRowContext(ctx, createCustomerPremium, arg.CustomerID, arg.PremiumAmount, arg.EffectiveDate)
-	var i CustomerPremium
-	err := row.Scan(
-		&i.ID,
-		&i.CustomerID,
-		&i.PremiumAmount,
-		&i.EffectiveDate,
-		&i.CreatedAt,
-	)
-	return i, err
+func (q *Queries) CreateCustomerPremium(ctx context.Context, arg CreateCustomerPremiumParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createCustomerPremium, arg.CustomerID, arg.PremiumAmount, arg.EffectiveDate)
 }
 
-const createSession = `-- name: CreateSession :one
+const createSession = `-- name: CreateSession :execresult
 INSERT INTO sessions (id, user_id, expires_at)
-VALUES (?, ?, ?) RETURNING id, user_id, created_at, expires_at
+VALUES (?, ?, ?)
 `
 
 type CreateSessionParams struct {
 	ID        string    `json:"id"`
-	UserID    int64     `json:"user_id"`
+	UserID    int32     `json:"user_id"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
-	row := q.db.QueryRowContext(ctx, createSession, arg.ID, arg.UserID, arg.ExpiresAt)
-	var i Session
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.CreatedAt,
-		&i.ExpiresAt,
-	)
-	return i, err
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createSession, arg.ID, arg.UserID, arg.ExpiresAt)
 }
 
-const createUser = `-- name: CreateUser :one
+const createUser = `-- name: CreateUser :execresult
 INSERT INTO users (email, password_hash, firstname, lastname, agent_id, company_id)
-VALUES (?, ?, ?, ?, ?, ?) RETURNING id, email, password_hash, firstname, lastname, agent_id, company_id, created_at
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreateUserParams struct {
@@ -123,11 +89,11 @@ type CreateUserParams struct {
 	Firstname    string `json:"firstname"`
 	Lastname     string `json:"lastname"`
 	AgentID      string `json:"agent_id"`
-	CompanyID    int64  `json:"company_id"`
+	CompanyID    int32  `json:"company_id"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createUser,
 		arg.Email,
 		arg.PasswordHash,
 		arg.Firstname,
@@ -135,18 +101,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.AgentID,
 		arg.CompanyID,
 	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
-		&i.Firstname,
-		&i.Lastname,
-		&i.AgentID,
-		&i.CompanyID,
-		&i.CreatedAt,
-	)
-	return i, err
 }
 
 const deleteSession = `-- name: DeleteSession :exec
@@ -227,7 +181,7 @@ const getCompany = `-- name: GetCompany :one
 SELECT id, name, created_at FROM companies WHERE id = ?
 `
 
-func (q *Queries) GetCompany(ctx context.Context, id int64) (Company, error) {
+func (q *Queries) GetCompany(ctx context.Context, id int32) (Company, error) {
 	row := q.db.QueryRowContext(ctx, getCompany, id)
 	var i Company
 	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
@@ -264,7 +218,7 @@ SELECT id, company_id, first_name, last_name, email, phone, medical_aid_provider
 // -----------------------
 // Customer Queries
 // -----------------------
-func (q *Queries) GetCustomerByID(ctx context.Context, id int64) (Customer, error) {
+func (q *Queries) GetCustomerByID(ctx context.Context, id int32) (Customer, error) {
 	row := q.db.QueryRowContext(ctx, getCustomerByID, id)
 	var i Customer
 	err := row.Scan(
@@ -312,7 +266,7 @@ SELECT id, customer_id, premium_amount, effective_date, created_at FROM customer
 // -----------------------
 // Customer Premium Queries
 // -----------------------
-func (q *Queries) GetCustomerPremiumsByCustomerID(ctx context.Context, customerID int64) ([]CustomerPremium, error) {
+func (q *Queries) GetCustomerPremiumsByCustomerID(ctx context.Context, customerID int32) ([]CustomerPremium, error) {
 	rows, err := q.db.QueryContext(ctx, getCustomerPremiumsByCustomerID, customerID)
 	if err != nil {
 		return nil, err
@@ -401,7 +355,7 @@ const getUserByID = `-- name: GetUserByID :one
 SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, created_at FROM users WHERE id = ?
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUserByID, id)
 	var i User
 	err := row.Scan(
