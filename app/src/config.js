@@ -7,6 +7,8 @@ export const API_ENDPOINTS = {
   LOGIN: `${API_URL}/api/auth/login`,
   LOGOUT: `${API_URL}/api/auth/logout`,
   ME: `${API_URL}/api/auth/me`,
+  SEND_OTP: `${API_URL}/api/auth/otp/send`,
+  VERIFY_OTP: `${API_URL}/api/auth/otp/verify`,
 
   // Companies
   COMPANIES: `${API_URL}/api/companies`,
@@ -16,4 +18,7 @@ export const API_ENDPOINTS = {
 
   // Twilio
   TWILIO_TOKEN: `${API_URL}/api/twilio/token`,
+
+  // Agent Status
+  AGENT_STATUS: `${API_URL}/api/agent/status`,
 };

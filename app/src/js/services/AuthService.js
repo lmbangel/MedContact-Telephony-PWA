@@ -2,7 +2,7 @@
  * Authentication service - Frontend API client
  */
 
-const API_URL = '/api';
+import { API_URL, API_ENDPOINTS } from '../../config.js';
 
 class AuthService {
   constructor() {
@@ -14,7 +14,7 @@ class AuthService {
    */
   async init() {
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
+      const response = await fetch(API_ENDPOINTS.ME, {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -41,7 +41,7 @@ class AuthService {
    */
   async register(email, password, firstname, lastname, agent_id, company_id) {
     try {
-      const response = await fetch(`${API_URL}/auth/register`, {
+      const response = await fetch(API_ENDPOINTS.REGISTER, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -77,7 +77,7 @@ class AuthService {
    */
   async login(email, password) {
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -92,8 +92,18 @@ class AuthService {
       const data = await response.json();
 
       if (response.ok) {
+        await fetch(`${API_URL}/api/agent/status`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: 'available' })
+        });
+
         this.currentUser = data.user;
         console.log('✅ Login successful');
+
         return { success: true, user: data.user };
       } else {
         return { success: false, error: data.detail || 'Failed to login' };
@@ -109,7 +119,16 @@ class AuthService {
    */
   async logout() {
     try {
-      await fetch(`${API_URL}/auth/logout`, {
+      await fetch(`${API_URL}/api/agent/status`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'offline' })
+      });
+
+      await fetch(API_ENDPOINTS.LOGOUT, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -142,7 +161,7 @@ class AuthService {
    */
   async sendOTP(email) {
     try {
-      const response = await fetch(`${API_URL}/auth/otp/send`, {
+      const response = await fetch(API_ENDPOINTS.SEND_OTP, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -170,7 +189,7 @@ class AuthService {
    */
   async verifyOTP(email, otp) {
     try {
-      const response = await fetch(`${API_URL}/auth/otp/verify`, {
+      const response = await fetch(API_ENDPOINTS.VERIFY_OTP, {
         method: 'POST',
         credentials: 'include',
         headers: {

@@ -83,3 +83,17 @@ DELETE FROM otp_codes WHERE expires_at < NOW() OR used = 1;
 -- name: CountRecentOTPAttempts :one
 SELECT COUNT(*) as count FROM otp_codes
 WHERE email = ? AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE);
+
+-- -----------------------
+-- Agent Status Queries
+-- -----------------------
+
+-- name: GetLatestAgentStatus :one
+SELECT * FROM agent_status
+WHERE user_id = ?
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: CreateAgentStatus :execresult
+INSERT INTO agent_status (user_id, status)
+VALUES (?, ?);

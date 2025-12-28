@@ -23,6 +23,20 @@ func (q *Queries) CountRecentOTPAttempts(ctx context.Context, email string) (int
 	return count, err
 }
 
+const createAgentStatus = `-- name: CreateAgentStatus :execresult
+INSERT INTO agent_status (user_id, status)
+VALUES (?, ?)
+`
+
+type CreateAgentStatusParams struct {
+	UserID int32  `json:"user_id"`
+	Status string `json:"status"`
+}
+
+func (q *Queries) CreateAgentStatus(ctx context.Context, arg CreateAgentStatusParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createAgentStatus, arg.UserID, arg.Status)
+}
+
 const createCompany = `-- name: CreateCompany :execresult
 INSERT INTO companies (name) VALUES (?)
 `
@@ -335,6 +349,29 @@ func (q *Queries) GetCustomerPremiumsByCustomerID(ctx context.Context, customerI
 	return items, nil
 }
 
+const getLatestAgentStatus = `-- name: GetLatestAgentStatus :one
+
+SELECT id, user_id, status, created_at FROM agent_status
+WHERE user_id = ?
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+// -----------------------
+// Agent Status Queries
+// -----------------------
+func (q *Queries) GetLatestAgentStatus(ctx context.Context, userID int32) (AgentStatus, error) {
+	row := q.db.QueryRowContext(ctx, getLatestAgentStatus, userID)
+	var i AgentStatus
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT id, user_id, created_at, expires_at FROM sessions WHERE id = ?
 `
@@ -401,7 +438,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
-		//&i.PasswordHash,
+		&i.PasswordHash,
 		&i.Firstname,
 		&i.Lastname,
 		&i.AgentID,

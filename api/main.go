@@ -150,9 +150,10 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "https://localhost:3000"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
@@ -174,6 +175,10 @@ func main() {
 
 	// Customer routes
 	r.Get("/api/customers/by-phone", server.getCustomerByPhone)
+
+	// Agent status routes
+	r.Get("/api/agent/status", server.getAgentStatus)
+	r.Post("/api/agent/status", server.updateAgentStatus)
 
 	// Twilio routes
 	r.Get("/api/twilio/token", server.getTwilioToken)
@@ -590,6 +595,117 @@ func (s *Server) getCustomerByPhone(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) getAgentStatus(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Get session
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Check expiration
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Get latest agent status
+	status, err := s.queries.GetLatestAgentStatus(r.Context(), session.UserID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No status found, return default offline status
+			log.Printf("ℹ️ No status found for user ID: %d, returning default 'offline'", session.UserID)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"status":  "offline",
+			})
+			return
+		}
+		log.Printf("❌ Error getting agent status: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get agent status: %v", err))
+		return
+	}
+
+	log.Printf("✅ Agent status retrieved: '%s' for user ID: %d", status.Status, session.UserID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"status":  status.Status,
+	})
+}
+
+func (s *Server) updateAgentStatus(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// Get session
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Check expiration
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate status
+	validStatuses := map[string]bool{
+		"available": true,
+		"busy":      true,
+		"on_break":  true,
+		"offline":   true,
+	}
+
+	if !validStatuses[req.Status] {
+		respondError(w, http.StatusBadRequest, "Invalid status value")
+		return
+	}
+
+	// Create new status record
+	_, err = s.queries.CreateAgentStatus(r.Context(), db.CreateAgentStatusParams{
+		UserID: session.UserID,
+		Status: req.Status,
+	})
+	if err != nil {
+		log.Printf("❌ Error creating agent status: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update agent status: %v", err))
+		return
+	}
+
+	log.Printf("✅ Agent status updated to '%s' for user ID: %d", req.Status, session.UserID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"status":  req.Status,
+	})
+}
+
 func (s *Server) getTwilioToken(w http.ResponseWriter, r *http.Request) {
 	// Get current user from session
 	cookie, err := r.Cookie("session_id")
@@ -770,6 +886,7 @@ func normalizePhoneNumber(phone string) string {
 }
 
 func respondError(w http.ResponseWriter, status int, message string) {
+	log.Printf("❌ ERROR [%d]: %s", status, message)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(ErrorResponse{Detail: message})
