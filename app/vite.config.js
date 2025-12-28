@@ -14,9 +14,15 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        // Phone app pages (UNCHANGED)
         main: resolve(__dirname, 'index.html'),
         login: resolve(__dirname, 'login.html'),
-        register: resolve(__dirname, 'register.html')
+        register: resolve(__dirname, 'register.html'),
+
+        // Dashboard pages (NEW)
+        dashboardLogin: resolve(__dirname, 'dashboard-login.html'),
+        dashboardRegister: resolve(__dirname, 'dashboard-register.html'),
+        dashboardHome: resolve(__dirname, 'dashboard-home.html')
       }
     }
   },

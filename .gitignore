@@ -32,3 +32,6 @@ docker
 app/node_modules
 .claude
 .docs
+*.png
+*.jpg
+*.jpeg

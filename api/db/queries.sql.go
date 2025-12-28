@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+const countRecentOTPAttempts = `-- name: CountRecentOTPAttempts :one
+SELECT COUNT(*) as count FROM otp_codes
+WHERE email = ? AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+`
+
+func (q *Queries) CountRecentOTPAttempts(ctx context.Context, email string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRecentOTPAttempts, email)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCompany = `-- name: CreateCompany :execresult
 INSERT INTO companies (name) VALUES (?)
 `
@@ -63,6 +75,25 @@ func (q *Queries) CreateCustomerPremium(ctx context.Context, arg CreateCustomerP
 	return q.db.ExecContext(ctx, createCustomerPremium, arg.CustomerID, arg.PremiumAmount, arg.EffectiveDate)
 }
 
+const createOTPCode = `-- name: CreateOTPCode :execresult
+
+INSERT INTO otp_codes (email, otp_code, expires_at)
+VALUES (?, ?, ?)
+`
+
+type CreateOTPCodeParams struct {
+	Email     string    `json:"email"`
+	OtpCode   string    `json:"otp_code"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// -----------------------
+// OTP Code Queries
+// -----------------------
+func (q *Queries) CreateOTPCode(ctx context.Context, arg CreateOTPCodeParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createOTPCode, arg.Email, arg.OtpCode, arg.ExpiresAt)
+}
+
 const createSession = `-- name: CreateSession :execresult
 INSERT INTO sessions (id, user_id, expires_at)
 VALUES (?, ?, ?)
@@ -101,6 +132,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Res
 		arg.AgentID,
 		arg.CompanyID,
 	)
+}
+
+const deleteExpiredOTPCodes = `-- name: DeleteExpiredOTPCodes :exec
+DELETE FROM otp_codes WHERE expires_at < NOW() OR used = 1
+`
+
+func (q *Queries) DeleteExpiredOTPCodes(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredOTPCodes)
+	return err
 }
 
 const deleteSession = `-- name: DeleteSession :exec
@@ -361,7 +401,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
-		&i.PasswordHash,
+		//&i.PasswordHash,
 		&i.Firstname,
 		&i.Lastname,
 		&i.AgentID,
@@ -369,4 +409,38 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getValidOTPCode = `-- name: GetValidOTPCode :one
+SELECT id, email, otp_code, expires_at, used, created_at FROM otp_codes
+WHERE email = ? AND otp_code = ? AND used = 0 AND expires_at > NOW()
+ORDER BY created_at DESC LIMIT 1
+`
+
+type GetValidOTPCodeParams struct {
+	Email   string `json:"email"`
+	OtpCode string `json:"otp_code"`
+}
+
+func (q *Queries) GetValidOTPCode(ctx context.Context, arg GetValidOTPCodeParams) (OtpCode, error) {
+	row := q.db.QueryRowContext(ctx, getValidOTPCode, arg.Email, arg.OtpCode)
+	var i OtpCode
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OtpCode,
+		&i.ExpiresAt,
+		&i.Used,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const markOTPCodeAsUsed = `-- name: MarkOTPCodeAsUsed :exec
+UPDATE otp_codes SET used = 1 WHERE id = ?
+`
+
+func (q *Queries) MarkOTPCodeAsUsed(ctx context.Context, id int32) error {
+	_, err := q.db.ExecContext(ctx, markOTPCodeAsUsed, id)
+	return err
 }

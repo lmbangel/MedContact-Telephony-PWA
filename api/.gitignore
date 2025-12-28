@@ -16,3 +16,6 @@ data/
 
 # Go
 vendor/
+
+# OTP logs
+otp.log

@@ -136,6 +136,63 @@ class AuthService {
   isAuthenticated() {
     return this.currentUser !== null;
   }
+
+  /**
+   * Send OTP to email
+   */
+  async sendOTP(email) {
+    try {
+      const response = await fetch(`${API_URL}/auth/otp/send`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log('✅ OTP sent');
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, error: data.error || 'Failed to send OTP' };
+      }
+    } catch (error) {
+      console.error('Network error during OTP send:', error);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  }
+
+  /**
+   * Verify OTP and login
+   */
+  async verifyOTP(email, otp) {
+    try {
+      const response = await fetch(`${API_URL}/auth/otp/verify`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, otp })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        this.currentUser = data.user;
+        console.log('✅ OTP verification successful');
+        return { success: true, user: data.user };
+      } else {
+        return { success: false, error: 'Invalid or expired OTP' };
+      }
+    } catch (error) {
+      console.error('Network error during OTP verification:', error);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  }
 }
 
 // Export singleton instance

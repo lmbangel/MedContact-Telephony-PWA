@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
+
+	// "net/smtp" // Uncomment when using SMTP email sending
 	"omnicall/db"
 	"os"
 	"strings"
@@ -81,6 +84,21 @@ type TwilioTokenResponse struct {
 	Identity string `json:"identity"`
 }
 
+type SendOTPRequest struct {
+	Email string `json:"email"`
+}
+
+type VerifyOTPRequest struct {
+	Email string `json:"email"`
+	OTP   string `json:"otp"`
+}
+
+type OTPResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 func main() {
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
@@ -147,6 +165,8 @@ func main() {
 	r.Post("/api/auth/login", server.login)
 	r.Post("/api/auth/logout", server.logout)
 	r.Get("/api/auth/me", server.getCurrentUser)
+	r.Post("/api/auth/otp/send", server.sendOTP)
+	r.Post("/api/auth/otp/verify", server.verifyOTP)
 
 	// Company routes
 	r.Get("/api/companies", server.getCompanies)
@@ -279,8 +299,15 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(AuthResponse{
-		Success:   true,
-		User:      &user,
+		Success: true,
+		User: &db.User{
+			ID:        user.ID,
+			Email:     user.Email,
+			Firstname: user.Firstname,
+			Lastname:  user.Lastname,
+			AgentID:   user.AgentID,
+			CompanyID: user.CompanyID,
+		},
 		SessionID: session.ID,
 	})
 }
@@ -344,8 +371,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(AuthResponse{
-		Success:   true,
-		User:      &user,
+		Success: true,
+		User: &db.User{
+			ID:        user.ID,
+			Email:     user.Email,
+			Firstname: user.Firstname,
+			Lastname:  user.Lastname,
+			AgentID:   user.AgentID,
+			CompanyID: user.CompanyID,
+		},
 		SessionID: session.ID,
 	})
 }
@@ -399,7 +433,14 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(UserResponse{
 		Success: true,
-		User:    &user,
+		User: &db.User{
+			ID:        user.ID,
+			Email:     user.Email,
+			Firstname: user.Firstname,
+			Lastname:  user.Lastname,
+			AgentID:   user.AgentID,
+			CompanyID: user.CompanyID,
+		},
 	})
 }
 
@@ -732,4 +773,217 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(ErrorResponse{Detail: message})
+}
+
+// Generate 6-digit OTP
+func generateOTP() string {
+	n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
+	return fmt.Sprintf("%06d", n.Int64())
+}
+
+// Send OTP via email (currently logs to file for development)
+func sendOTPEmail(to, otpCode string) error {
+	// For development: Log OTP to file instead of sending email
+	logMessage := fmt.Sprintf("[%s] OTP for %s: %s\n",
+		time.Now().Format("2006-01-02 15:04:05"), to, otpCode)
+
+	// Log to console
+	log.Printf("📧 OTP Generated for %s: %s", to, otpCode)
+
+	// Also append to otp.log file
+	f, err := os.OpenFile("otp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Warning: Could not write to otp.log: %v", err)
+		// Don't fail if we can't write to file - just log to console
+		return nil
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(logMessage); err != nil {
+		log.Printf("Warning: Could not write to otp.log: %v", err)
+	}
+
+	return nil
+
+	/*
+		// SMTP Email sending (uncomment when SMTP is configured)
+		from := os.Getenv("SMTP_FROM")
+		password := os.Getenv("SMTP_PASSWORD")
+		smtpHost := os.Getenv("SMTP_HOST")
+		smtpPort := os.Getenv("SMTP_PORT")
+
+		subject := "Your MedContact Dashboard Login Code"
+		body := fmt.Sprintf(`
+			<html><body style="font-family: Arial, sans-serif;">
+			<h2>MedContact Dashboard Login</h2>
+			<p>Your one-time password is:</p>
+			<h1 style="color: #3B82F6; letter-spacing: 5px;">%s</h1>
+			<p>This code will expire in 5 minutes.</p>
+			<p style="color: #6B7280;">If you didn't request this code, please ignore this email.</p>
+			</body></html>
+		`, otpCode)
+
+		message := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-version: 1.0\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n%s",
+			from, to, subject, body)
+
+		auth := smtp.PlainAuth("", from, password, smtpHost)
+		err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{to}, []byte(message))
+		return err
+	*/
+}
+
+// OTP Handlers
+func (s *Server) sendOTP(w http.ResponseWriter, r *http.Request) {
+	var req SendOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(OTPResponse{Success: false, Error: "Invalid request"})
+		return
+	}
+
+	// Validate email format
+	if req.Email == "" || !strings.Contains(req.Email, "@") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(OTPResponse{Success: false, Error: "Invalid email"})
+		return
+	}
+
+	// Check if user exists
+	_, err := s.queries.GetUserByEmail(r.Context(), req.Email)
+	if err == sql.ErrNoRows {
+		// Don't reveal if user exists - return success anyway for security
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(OTPResponse{Success: true, Message: "If this email exists, an OTP has been sent"})
+		return
+	}
+
+	// Rate limiting: Check recent attempts
+	count, _ := s.queries.CountRecentOTPAttempts(r.Context(), req.Email)
+	if count >= 3 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(OTPResponse{Success: false, Error: "Too many attempts. Please try again in 15 minutes"})
+		return
+	}
+
+	// Generate OTP
+	otpCode := generateOTP()
+	expiresAt := time.Now().Add(5 * time.Minute)
+
+	// Store in database
+	_, err = s.queries.CreateOTPCode(r.Context(), db.CreateOTPCodeParams{
+		Email:     req.Email,
+		OtpCode:   otpCode,
+		ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		log.Printf("Failed to create OTP: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(OTPResponse{Success: false, Error: "Failed to generate OTP"})
+		return
+	}
+
+	// Send email
+	if err := sendOTPEmail(req.Email, otpCode); err != nil {
+		log.Printf("Failed to send OTP email: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(OTPResponse{Success: false, Error: "Failed to send OTP email"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(OTPResponse{Success: true, Message: "OTP sent to your email"})
+}
+
+func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
+	var req VerifyOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(AuthResponse{Success: false})
+		return
+	}
+
+	// Validate inputs
+	if req.Email == "" || req.OTP == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(AuthResponse{Success: false})
+		return
+	}
+
+	// Get valid OTP
+	otpRecord, err := s.queries.GetValidOTPCode(r.Context(), db.GetValidOTPCodeParams{
+		Email:   req.Email,
+		OtpCode: req.OTP,
+	})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(AuthResponse{Success: false})
+		return
+	}
+
+	// Mark OTP as used
+	s.queries.MarkOTPCodeAsUsed(r.Context(), otpRecord.ID)
+
+	// Get user
+	user, err := s.queries.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(AuthResponse{Success: false})
+		return
+	}
+
+	// Create session (same as regular login)
+	sessionID := make([]byte, 32)
+	rand.Read(sessionID)
+	sessionIDStr := hex.EncodeToString(sessionID)
+
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+
+	_, err = s.queries.CreateSession(r.Context(), db.CreateSessionParams{
+		ID:        sessionIDStr,
+		UserID:    user.ID,
+		ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(AuthResponse{Success: false})
+		return
+	}
+
+	// Set cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionIDStr,
+		Path:     "/",
+		Expires:  expiresAt,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   false, // Set to true in production with HTTPS
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(AuthResponse{
+		Success: true,
+		User: &db.User{
+			ID:        user.ID,
+			Email:     user.Email,
+			Firstname: user.Firstname,
+			Lastname:  user.Lastname,
+			AgentID:   user.AgentID,
+			CompanyID: user.CompanyID,
+		},
+		SessionID: sessionIDStr,
+	})
 }
