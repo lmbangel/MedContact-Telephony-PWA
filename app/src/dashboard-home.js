@@ -134,6 +134,18 @@ document.addEventListener('DOMContentLoaded', () => {
   if (statusDropdown) {
     statusDropdown.addEventListener('change', handleStatusChange);
   }
+
+  // Phone panel toggle - only via telephony button
+  const telephonyBtn = document.getElementById('telephony-btn');
+  const phonePanel = document.getElementById('phone-panel');
+
+  if (telephonyBtn && phonePanel) {
+    telephonyBtn.addEventListener('click', () => {
+      console.log('Toggling phone panel');
+      phonePanel.classList.toggle('translate-x-0');
+      phonePanel.classList.toggle('-translate-x-full');
+    });
+  }
 });
 
 init();
