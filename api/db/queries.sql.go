@@ -37,6 +37,43 @@ func (q *Queries) CreateAgentStatus(ctx context.Context, arg CreateAgentStatusPa
 	return q.db.ExecContext(ctx, createAgentStatus, arg.UserID, arg.Status)
 }
 
+const createCallRecord = `-- name: CreateCallRecord :execresult
+
+INSERT INTO transcriptions (
+    customer_id, agent_id, company_id, call_sid, from_number,
+    to_number, call_status, duration, recording_start_time
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateCallRecordParams struct {
+	CustomerID         sql.NullInt32  `json:"customer_id"`
+	AgentID            sql.NullInt32  `json:"agent_id"`
+	CompanyID          int32          `json:"company_id"`
+	CallSid            string         `json:"call_sid"`
+	FromNumber         sql.NullString `json:"from_number"`
+	ToNumber           sql.NullString `json:"to_number"`
+	CallStatus         sql.NullString `json:"call_status"`
+	Duration           sql.NullInt32  `json:"duration"`
+	RecordingStartTime sql.NullTime   `json:"recording_start_time"`
+}
+
+// -----------------------
+// Call/Transcription Queries
+// -----------------------
+func (q *Queries) CreateCallRecord(ctx context.Context, arg CreateCallRecordParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createCallRecord,
+		arg.CustomerID,
+		arg.AgentID,
+		arg.CompanyID,
+		arg.CallSid,
+		arg.FromNumber,
+		arg.ToNumber,
+		arg.CallStatus,
+		arg.Duration,
+		arg.RecordingStartTime,
+	)
+}
+
 const createCompany = `-- name: CreateCompany :execresult
 INSERT INTO companies (name) VALUES (?)
 `
@@ -166,6 +203,63 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+const getAgentCallHistory = `-- name: GetAgentCallHistory :many
+SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
+WHERE agent_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type GetAgentCallHistoryParams struct {
+	AgentID sql.NullInt32 `json:"agent_id"`
+	Limit   int32         `json:"limit"`
+	Offset  int32         `json:"offset"`
+}
+
+func (q *Queries) GetAgentCallHistory(ctx context.Context, arg GetAgentCallHistoryParams) ([]Transcription, error) {
+	rows, err := q.db.QueryContext(ctx, getAgentCallHistory, arg.AgentID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transcription{}
+	for rows.Next() {
+		var i Transcription
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerID,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.CallSid,
+			&i.RecordingSid,
+			&i.RecordingUrl,
+			&i.RecordingDuration,
+			&i.RecordingStatus,
+			&i.RecordingChannels,
+			&i.RecordingStartTime,
+			&i.Transcript,
+			&i.Summary,
+			&i.FromNumber,
+			&i.ToNumber,
+			&i.CallStatus,
+			&i.Duration,
+			&i.CallReason,
+			&i.TranscriptionText,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAllCompanies = `-- name: GetAllCompanies :many
 SELECT id, name, created_at FROM companies ORDER BY created_at DESC
 `
@@ -229,6 +323,38 @@ func (q *Queries) GetAllCustomers(ctx context.Context) ([]Customer, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getCallBySid = `-- name: GetCallBySid :one
+SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions WHERE call_sid = ?
+`
+
+func (q *Queries) GetCallBySid(ctx context.Context, callSid string) (Transcription, error) {
+	row := q.db.QueryRowContext(ctx, getCallBySid, callSid)
+	var i Transcription
+	err := row.Scan(
+		&i.ID,
+		&i.CustomerID,
+		&i.AgentID,
+		&i.CompanyID,
+		&i.CallSid,
+		&i.RecordingSid,
+		&i.RecordingUrl,
+		&i.RecordingDuration,
+		&i.RecordingStatus,
+		&i.RecordingChannels,
+		&i.RecordingStartTime,
+		&i.Transcript,
+		&i.Summary,
+		&i.FromNumber,
+		&i.ToNumber,
+		&i.CallStatus,
+		&i.Duration,
+		&i.CallReason,
+		&i.TranscriptionText,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getCompany = `-- name: GetCompany :one
@@ -388,6 +514,36 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 	return i, err
 }
 
+const getTodayCallStats = `-- name: GetTodayCallStats :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id = ?
+    AND DATE(created_at) = CURDATE()
+`
+
+type GetTodayCallStatsRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetTodayCallStats(ctx context.Context, agentID sql.NullInt32) (GetTodayCallStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, getTodayCallStats, agentID)
+	var i GetTodayCallStatsRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
 const getUserByAgentID = `-- name: GetUserByAgentID :one
 SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, created_at FROM users WHERE agent_id = ?
 `
@@ -479,5 +635,22 @@ UPDATE otp_codes SET used = 1 WHERE id = ?
 
 func (q *Queries) MarkOTPCodeAsUsed(ctx context.Context, id int32) error {
 	_, err := q.db.ExecContext(ctx, markOTPCodeAsUsed, id)
+	return err
+}
+
+const updateCallRecord = `-- name: UpdateCallRecord :exec
+UPDATE transcriptions
+SET call_status = ?, duration = ?
+WHERE call_sid = ?
+`
+
+type UpdateCallRecordParams struct {
+	CallStatus sql.NullString `json:"call_status"`
+	Duration   sql.NullInt32  `json:"duration"`
+	CallSid    string         `json:"call_sid"`
+}
+
+func (q *Queries) UpdateCallRecord(ctx context.Context, arg UpdateCallRecordParams) error {
+	_, err := q.db.ExecContext(ctx, updateCallRecord, arg.CallStatus, arg.Duration, arg.CallSid)
 	return err
 }

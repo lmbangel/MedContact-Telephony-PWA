@@ -3,6 +3,8 @@
  * Handles device initialization, incoming/outgoing calls, and call state
  */
 
+import { callTrackingService } from './CallTrackingService.js';
+
 export class TwilioService {
   constructor() {
     this.device = null;
@@ -14,6 +16,7 @@ export class TwilioService {
       onDisconnected: null,
       onError: null
     };
+    this.callTrackingService = callTrackingService;
   }
 
   /**
@@ -97,31 +100,58 @@ export class TwilioService {
    * @param {Object} connection - Twilio connection object
    */
   setupConnectionHandlers(connection) {
-    connection.on('accept', () => {
+    connection.on('accept', async () => {
       console.log('Call accepted');
+
+      // Track call start
+      const callSid = connection.parameters.CallSid;
+      const fromNumber = connection.parameters.From || connection.customParameters?.From;
+      const toNumber = connection.parameters.To || connection.customParameters?.To;
+
+      if (callSid && fromNumber && toNumber) {
+        await this.callTrackingService.recordCall({
+          call_sid: callSid,
+          from_number: fromNumber,
+          to_number: toNumber,
+          call_status: 'in-progress',
+        });
+      }
+
       if (this.listeners.onConnected) {
         this.listeners.onConnected();
       }
     });
 
-    connection.on('disconnect', () => {
+    connection.on('disconnect', async () => {
       console.log('Call disconnected');
+
+      // Update call with final status and duration
+      await this.callTrackingService.endActiveCall('completed');
+
       this.currentConnection = null;
       if (this.listeners.onDisconnected) {
         this.listeners.onDisconnected();
       }
     });
 
-    connection.on('reject', () => {
+    connection.on('reject', async () => {
       console.log('Call rejected');
+
+      // Update call as rejected/no-answer
+      await this.callTrackingService.endActiveCall('no-answer');
+
       this.currentConnection = null;
       if (this.listeners.onDisconnected) {
         this.listeners.onDisconnected();
       }
     });
 
-    connection.on('error', (error) => {
+    connection.on('error', async (error) => {
       console.error('Connection error:', error);
+
+      // Update call as failed
+      await this.callTrackingService.endActiveCall('failed');
+
       if (this.listeners.onError) {
         this.listeners.onError(error);
       }

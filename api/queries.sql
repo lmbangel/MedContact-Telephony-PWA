@@ -97,3 +97,37 @@ LIMIT 1;
 -- name: CreateAgentStatus :execresult
 INSERT INTO agent_status (user_id, status)
 VALUES (?, ?);
+
+-- -----------------------
+-- Call/Transcription Queries
+-- -----------------------
+
+-- name: CreateCallRecord :execresult
+INSERT INTO transcriptions (
+    customer_id, agent_id, company_id, call_sid, from_number,
+    to_number, call_status, duration, recording_start_time
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: UpdateCallRecord :exec
+UPDATE transcriptions
+SET call_status = ?, duration = ?
+WHERE call_sid = ?;
+
+-- name: GetCallBySid :one
+SELECT * FROM transcriptions WHERE call_sid = ?;
+
+-- name: GetTodayCallStats :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id = ?
+    AND DATE(created_at) = CURDATE();
+
+-- name: GetAgentCallHistory :many
+SELECT * FROM transcriptions
+WHERE agent_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;

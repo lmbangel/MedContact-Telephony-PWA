@@ -21,7 +21,7 @@
       </div>
 
       <!-- Phone App iframe -->
-      <div class="flex-1 overflow-hidden">
+      <div class="flex-1 overflow-hidden pt-4">
         <iframe
           id="phone-iframe"
           src="/app/"
@@ -241,18 +241,18 @@
             </div>
           </div>
           <div class="flex gap-4 text-xs">
-            <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
-              <option>All Call Types</option>
-              <option>Inbound</option>
-              <option>Outbound</option>
+            <select class="border-0 rounded px-3 py-2 bg-white/10 text-white">
+              <option class="text-gray-700">All Call Types</option>
+              <option class="text-gray-700">Inbound</option>
+              <option class="text-gray-700">Outbound</option>
             </select>
             <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
               <option>All Agents</option>
             </select>
             <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
-              <option>Today</option>
-              <option>Last 7 days</option>
-              <option>Last 30 days</option>
+              <option class="text-gray-700">Today</option>
+              <option class="text-gray-700">Last 7 days</option>
+              <option class="text-gray-700">Last 30 days</option>
             </select>
           </div>
         </div>
@@ -267,17 +267,17 @@
           </div>
           <div class="flex gap-4 text-xs">
             <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
-              <option>All Types</option>
-              <option>Follow-up</option>
-              <option>Callback</option>
+              <option class="text-gray-700">All Types</option>
+              <option class="text-gray-700">Follow-up</option>
+              <option class="text-gray-700">Callback</option>
             </select>
             <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
               <option>All Agents</option>
             </select>
             <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
-              <option>Overdue</option>
-              <option>Due Today</option>
-              <option>Next 7 days</option>
+              <option class="text-gray-700">Overdue</option>
+              <option class="text-gray-700">Due Today</option>
+              <option class="text-gray-700">Next 7 days</option>
             </select>
           </div>
         </div>
@@ -295,9 +295,9 @@
               <option>All Call Types</option>
             </select>
             <select class="border border-gray-300 rounded px-3 py-2 text-sm">
-              <option>Last 30 days</option>
-              <option>Last 7 days</option>
-              <option>Today</option>
+              <option class="text-gray-700">Last 30 days</option>
+              <option class="text-gray-700">Last 7 days</option>
+              <option class="text-gray-700">Today</option>
             </select>
           </div>
         </div>
@@ -320,7 +320,7 @@
                 <p class="text-xs text-gray-500">Require callback</p>
               </div>
             </div>
-            <p class="text-3xl font-bold text-orange-500 mb-3">--</p>
+            <p class="text-3xl font-bold text-orange-500 mb-3" id="missedCallsToday">0</p>
             <button class="text-sm text-blue-900 hover:underline flex items-center gap-1">
               View Details
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -390,7 +390,7 @@
                 <p class="text-xs text-gray-500">Per call</p>
               </div>
             </div>
-            <p class="text-3xl font-bold text-green-500 mb-3">--</p>
+            <p class="text-3xl font-bold text-green-500 mb-3" id="avgDurationToday">0:00</p>
             <button class="text-sm text-blue-900 hover:underline flex items-center gap-1">
               View Details
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -38,6 +38,56 @@ async function fetchAgentStatus() {
   }
 }
 
+// Fetch call statistics
+async function fetchCallStats() {
+  try {
+    const response = await fetch(`${API_URL}/api/calls/stats`, {
+      credentials: 'include'
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      return {
+        totalCalls: data.total_calls || 0,
+        answeredCalls: data.answered_calls || 0,
+        missedCalls: data.missed_calls || 0,
+        avgDuration: data.avg_duration || 0
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching call stats:', error);
+    return null;
+  }
+}
+
+// Update dashboard with call stats
+function updateCallStats(stats) {
+  if (!stats) return;
+  console.log('Updating call stats:', stats);
+
+  // Update total calls today
+  const totalCallsElement = document.getElementById('totalCallsToday');
+  if (totalCallsElement) {
+    totalCallsElement.textContent = stats.totalCalls;
+  }
+
+  // Update missed calls
+  const missedCallsElement = document.getElementById('missedCallsToday');
+  if (missedCallsElement) {
+    missedCallsElement.textContent = stats.missedCalls;
+  }
+
+  // Update average duration (convert to minutes:seconds format)
+  const avgDurationElement = document.getElementById('avgDurationToday');
+  if (avgDurationElement) {
+    const minutes = Math.floor(stats.avgDuration / 60);
+    const seconds = Math.floor(stats.avgDuration % 60);
+    const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    avgDurationElement.textContent = formattedDuration;
+  }
+}
+
 // Update agent status
 async function updateAgentStatus(status) {
   try {
@@ -103,12 +153,15 @@ async function init() {
     statusDropdown.value = currentStatus;
   }
 
-  // TODO: Fetch and display dashboard metrics
-  // - Total calls today
-  // - Active calls
-  // - Customers contacted
-  // - Pending tasks
-  // etc.
+  // Fetch and display call statistics
+  const callStats = await fetchCallStats();
+  updateCallStats(callStats);
+
+  // Refresh call stats every 30 seconds
+  setInterval(async () => {
+    const updatedStats = await fetchCallStats();
+    updateCallStats(updatedStats);
+  }, 30000);
 }
 
 // Logout handler

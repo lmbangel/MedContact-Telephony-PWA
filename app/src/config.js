@@ -21,4 +21,12 @@ export const API_ENDPOINTS = {
 
   // Agent Status
   AGENT_STATUS: `${API_URL}/api/agent/status`,
+
+  // Call Tracking
+  CALLS: `${API_URL}/api/calls`,
+  CALL_STATS: `${API_URL}/api/calls/stats`,
+  UPDATE_CALL: (callSid) => `${API_URL}/api/calls/${callSid}`,
 };
+
+// Export API_URL as API_BASE_URL for compatibility
+export const API_BASE_URL = API_URL;

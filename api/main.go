@@ -99,6 +99,23 @@ type OTPResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type CallRecordRequest struct {
+	CallSID    string  `json:"call_sid"`
+	FromNumber string  `json:"from_number"`
+	ToNumber   string  `json:"to_number"`
+	CallStatus string  `json:"call_status"`
+	Duration   int32   `json:"duration"`
+	CustomerID *int32  `json:"customer_id,omitempty"`
+}
+
+type CallStatsResponse struct {
+	Success      bool    `json:"success"`
+	TotalCalls   int64   `json:"total_calls"`
+	AnsweredCalls int64  `json:"answered_calls"`
+	MissedCalls  int64   `json:"missed_calls"`
+	AvgDuration  float64 `json:"avg_duration"`
+}
+
 func main() {
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
@@ -179,6 +196,11 @@ func main() {
 	// Agent status routes
 	r.Get("/api/agent/status", server.getAgentStatus)
 	r.Post("/api/agent/status", server.updateAgentStatus)
+
+	// Call tracking routes
+	r.Post("/api/calls", server.createCallRecord)
+	r.Put("/api/calls/{call_sid}", server.updateCallRecord)
+	r.Get("/api/calls/stats", server.getCallStats)
 
 	// Twilio routes
 	r.Get("/api/twilio/token", server.getTwilioToken)
@@ -865,6 +887,181 @@ func (s *Server) handleIncomingCall(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/xml")
 	w.Write([]byte(twiml))
+}
+
+// Call tracking handlers
+func (s *Server) createCallRecord(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	user, err := s.queries.GetUserByID(r.Context(), session.UserID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	var req CallRecordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.CallSID == "" || req.FromNumber == "" || req.ToNumber == "" {
+		respondError(w, http.StatusBadRequest, "call_sid, from_number, and to_number are required")
+		return
+	}
+
+	// Create call record
+	var customerID sql.NullInt32
+	if req.CustomerID != nil {
+		customerID = sql.NullInt32{Int32: *req.CustomerID, Valid: true}
+	}
+
+	_, err = s.queries.CreateCallRecord(r.Context(), db.CreateCallRecordParams{
+		CustomerID: customerID,
+		AgentID: sql.NullInt32{Int32: user.ID, Valid: true},
+		CompanyID: user.CompanyID,
+		CallSid: req.CallSID,
+		FromNumber: sql.NullString{String: req.FromNumber, Valid: true},
+		ToNumber: sql.NullString{String: req.ToNumber, Valid: true},
+		CallStatus: sql.NullString{String: req.CallStatus, Valid: true},
+		Duration: sql.NullInt32{Int32: req.Duration, Valid: true},
+		RecordingStartTime: sql.NullTime{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		log.Printf("Failed to create call record: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to create call record")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Call record created",
+	})
+}
+
+func (s *Server) updateCallRecord(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	callSID := chi.URLParam(r, "call_sid")
+	if callSID == "" {
+		respondError(w, http.StatusBadRequest, "call_sid is required")
+		return
+	}
+
+	var req struct {
+		CallStatus string `json:"call_status"`
+		Duration   int32  `json:"duration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	err = s.queries.UpdateCallRecord(r.Context(), db.UpdateCallRecordParams{
+		CallStatus: sql.NullString{String: req.CallStatus, Valid: true},
+		Duration: sql.NullInt32{Int32: req.Duration, Valid: true},
+		CallSid: callSID,
+	})
+	if err != nil {
+		log.Printf("Failed to update call record: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to update call record")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Call record updated",
+	})
+}
+
+func (s *Server) getCallStats(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Get call stats for today
+	stats, err := s.queries.GetTodayCallStats(r.Context(), sql.NullInt32{
+		Int32: session.UserID,
+		Valid: true,
+	})
+	if err != nil {
+		log.Printf("Failed to get call stats: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get call stats")
+		return
+	}
+
+	// Convert AvgDuration from interface{} to float64
+	var avgDuration float64
+	if stats.AvgDuration != nil {
+		switch v := stats.AvgDuration.(type) {
+		case float64:
+			avgDuration = v
+		case int64:
+			avgDuration = float64(v)
+		case []uint8: // MySQL DECIMAL can come as []byte
+			fmt.Sscanf(string(v), "%f", &avgDuration)
+		default:
+			avgDuration = 0
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(CallStatsResponse{
+		Success:       true,
+		TotalCalls:    stats.TotalCalls,
+		AnsweredCalls: stats.AnsweredCalls,
+		MissedCalls:   stats.MissedCalls,
+		AvgDuration:   avgDuration,
+	})
 }
 
 // Helper functions
