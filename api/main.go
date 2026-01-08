@@ -75,6 +75,17 @@ type CustomerResponse struct {
 	Customer *db.Customer `json:"customer,omitempty"`
 }
 
+type CreateCustomerRequest struct {
+	CompanyID           int32  `json:"company_id"`
+	FirstName           string `json:"first_name"`
+	LastName            string `json:"last_name"`
+	Email               string `json:"email"`
+	Phone               string `json:"phone"`
+	MedicalAidProvider  string `json:"medical_aid_provider"`
+	MedicalAidNumber    string `json:"medical_aid_number"`
+	MedicalPlan         string `json:"medical_plan"`
+}
+
 type ErrorResponse struct {
 	Detail string `json:"detail"`
 }
@@ -192,6 +203,7 @@ func main() {
 
 	// Customer routes
 	r.Get("/api/customers/by-phone", server.getCustomerByPhone)
+	r.Post("/api/customers", server.createCustomer)
 
 	// Agent status routes
 	r.Get("/api/agent/status", server.getAgentStatus)
@@ -611,6 +623,110 @@ func (s *Server) getCustomerByPhone(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("✅ Returning customer: %s %s", customer.FirstName, customer.LastName)
 	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(CustomerResponse{
+		Success:  true,
+		Customer: &customer,
+	})
+}
+
+func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Parse request body
+	var req CreateCustomerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if req.FirstName == "" || req.LastName == "" || req.Email == "" || req.Phone == "" {
+		respondError(w, http.StatusBadRequest, "First name, last name, email, and phone are required")
+		return
+	}
+
+	// Validate company_id
+	if req.CompanyID <= 0 {
+		respondError(w, http.StatusBadRequest, "Valid company ID is required")
+		return
+	}
+
+	log.Printf("📝 Creating customer: %s %s (Company ID: %d)", req.FirstName, req.LastName, req.CompanyID)
+
+	// Create customer in database
+	result, err := s.queries.CreateCustomer(r.Context(), db.CreateCustomerParams{
+		CompanyID: req.CompanyID,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Email: sql.NullString{
+			String: req.Email,
+			Valid:  true,
+		},
+		Phone: sql.NullString{
+			String: req.Phone,
+			Valid:  true,
+		},
+		MedicalAidProvider: sql.NullString{
+			String: req.MedicalAidProvider,
+			Valid:  req.MedicalAidProvider != "",
+		},
+		MedicalAidNumber: sql.NullString{
+			String: req.MedicalAidNumber,
+			Valid:  req.MedicalAidNumber != "",
+		},
+		MedicalPlan: sql.NullString{
+			String: req.MedicalPlan,
+			Valid:  req.MedicalPlan != "",
+		},
+	})
+	if err != nil {
+		log.Printf("❌ Failed to create customer: %v", err)
+
+		// Check for duplicate email or phone
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "Duplicate entry") {
+			respondError(w, http.StatusBadRequest, "A customer with this email or phone already exists")
+		} else {
+			respondError(w, http.StatusInternalServerError, "Failed to create customer")
+		}
+		return
+	}
+
+	// Get the inserted customer ID
+	customerID, err := result.LastInsertId()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get customer ID")
+		return
+	}
+
+	// Fetch the created customer
+	customer, err := s.queries.GetCustomerByID(r.Context(), int32(customerID))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get customer")
+		return
+	}
+
+	log.Printf("✅ Customer created successfully: %s %s (ID: %d)", customer.FirstName, customer.LastName, customer.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(CustomerResponse{
 		Success:  true,
 		Customer: &customer,

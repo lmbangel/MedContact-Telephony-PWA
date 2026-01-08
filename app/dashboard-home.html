@@ -201,6 +201,7 @@
       <!-- Action Buttons -->
       <div class="flex flex-wrap gap-3 mb-6">
         <button
+          id="addCustomerBtn"
           class="px-4 py-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-lg text-sm font-medium transition flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -538,6 +539,168 @@
 
     </main>
 
+  </div>
+
+  <!-- Add Customer Modal -->
+  <div id="addCustomerModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+      <!-- Modal Header -->
+      <div class="bg-[#1e3a5f] text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
+        <h2 class="text-xl font-semibold">Add New Customer</h2>
+        <button id="closeModalBtn" class="text-white hover:text-gray-300 transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <form id="addCustomerForm" class="p-6">
+        <!-- Error/Success Message -->
+        <div id="formMessage" class="hidden mb-4 p-3 rounded-lg"></div>
+
+        <!-- Personal Information Section -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Personal Information</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- First Name -->
+            <div>
+              <label for="firstName" class="block text-sm font-medium text-gray-700 mb-1">
+                First Name <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="firstName"
+                name="firstName"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="John"
+              />
+            </div>
+
+            <!-- Last Name -->
+            <div>
+              <label for="lastName" class="block text-sm font-medium text-gray-700 mb-1">
+                Last Name <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="lastName"
+                name="lastName"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Doe"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Contact Information Section -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Contact Information</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Email -->
+            <div>
+              <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+                Email <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="john.doe@example.com"
+              />
+            </div>
+
+            <!-- Phone -->
+            <div>
+              <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">
+                Phone <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="tel"
+                id="phone"
+                name="phone"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="+1234567890"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Medical Aid Information Section -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Medical Aid Information</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Medical Aid Provider -->
+            <div>
+              <label for="medicalAidProvider" class="block text-sm font-medium text-gray-700 mb-1">
+                Medical Aid Provider
+              </label>
+              <input
+                type="text"
+                id="medicalAidProvider"
+                name="medicalAidProvider"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Discovery Health"
+              />
+            </div>
+
+            <!-- Medical Aid Number -->
+            <div>
+              <label for="medicalAidNumber" class="block text-sm font-medium text-gray-700 mb-1">
+                Medical Aid Number
+              </label>
+              <input
+                type="text"
+                id="medicalAidNumber"
+                name="medicalAidNumber"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="123456789"
+              />
+            </div>
+
+            <!-- Medical Plan -->
+            <div class="md:col-span-2">
+              <label for="medicalPlan" class="block text-sm font-medium text-gray-700 mb-1">
+                Medical Plan
+              </label>
+              <input
+                type="text"
+                id="medicalPlan"
+                name="medicalPlan"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Executive Plan"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-end gap-3 pt-4 border-t">
+          <button
+            type="button"
+            id="cancelBtn"
+            class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="submitBtn"
+            class="px-4 py-2 bg-rose-500 text-white hover:bg-rose-600 rounded-lg font-medium transition flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Add Customer
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
 </body>

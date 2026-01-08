@@ -1,4 +1,5 @@
 import { authService } from './js/services/AuthService.js';
+import { customerService } from './js/services/CustomerService.js';
 import { API_URL } from './config.js';
 
 // Fetch company by ID
@@ -199,6 +200,131 @@ document.addEventListener('DOMContentLoaded', () => {
       phonePanel.classList.toggle('-translate-x-full');
     });
   }
+
+  // Add Customer Modal handling
+  const addCustomerBtn = document.getElementById('addCustomerBtn');
+  const addCustomerModal = document.getElementById('addCustomerModal');
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const addCustomerForm = document.getElementById('addCustomerForm');
+  const formMessage = document.getElementById('formMessage');
+
+  // Open modal
+  if (addCustomerBtn) {
+    addCustomerBtn.addEventListener('click', () => {
+      addCustomerModal.classList.remove('hidden');
+      addCustomerForm.reset();
+      hideFormMessage();
+    });
+  }
+
+  // Close modal handlers
+  const closeModal = () => {
+    addCustomerModal.classList.add('hidden');
+    addCustomerForm.reset();
+    hideFormMessage();
+  };
+
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', closeModal);
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', closeModal);
+  }
+
+  // Close modal when clicking outside
+  if (addCustomerModal) {
+    addCustomerModal.addEventListener('click', (e) => {
+      if (e.target === addCustomerModal) {
+        closeModal();
+      }
+    });
+  }
+
+  // Form submission
+  if (addCustomerForm) {
+    addCustomerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Get form data
+      const formData = new FormData(addCustomerForm);
+      const user = authService.getCurrentUser();
+
+      if (!user || !user.company_id) {
+        showFormMessage('error', 'User not authenticated. Please log in again.');
+        return;
+      }
+
+      // Prepare customer data
+      const customerData = {
+        company_id: user.company_id,
+        first_name: formData.get('firstName'),
+        last_name: formData.get('lastName'),
+        email: formData.get('email'),
+        phone: formData.get('phone'),
+        medical_aid_provider: formData.get('medicalAidProvider') || '',
+        medical_aid_number: formData.get('medicalAidNumber') || '',
+        medical_plan: formData.get('medicalPlan') || '',
+      };
+
+      // Disable submit button
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Creating...
+      `;
+
+      try {
+        // Call API to create customer
+        const result = await customerService.createCustomer(customerData);
+
+        if (result.success) {
+          showFormMessage('success', 'Customer created successfully!');
+          setTimeout(() => {
+            closeModal();
+          }, 1500);
+        } else {
+          showFormMessage('error', result.error || 'Failed to create customer');
+        }
+      } catch (error) {
+        console.error('Error creating customer:', error);
+        showFormMessage('error', 'An unexpected error occurred. Please try again.');
+      } finally {
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Add Customer
+        `;
+      }
+    });
+  }
 });
+
+// Helper functions for form messages
+function showFormMessage(type, message) {
+  const formMessage = document.getElementById('formMessage');
+  formMessage.classList.remove('hidden');
+
+  if (type === 'success') {
+    formMessage.className = 'mb-4 p-3 rounded-lg bg-green-50 text-green-800 border border-green-200';
+  } else {
+    formMessage.className = 'mb-4 p-3 rounded-lg bg-red-50 text-red-800 border border-red-200';
+  }
+
+  formMessage.textContent = message;
+}
+
+function hideFormMessage() {
+  const formMessage = document.getElementById('formMessage');
+  formMessage.classList.add('hidden');
+}
 
 init();

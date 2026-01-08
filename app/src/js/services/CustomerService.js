@@ -66,6 +66,59 @@ class CustomerService {
       line2: customer.medical_plan?.String ? `(${customer.medical_plan.String})` : '',
     };
   }
+
+  /**
+   * Create a new customer
+   * @param {Object} customerData - Customer data
+   * @param {string} customerData.first_name - First name
+   * @param {string} customerData.last_name - Last name
+   * @param {string} customerData.email - Email address
+   * @param {string} customerData.phone - Phone number
+   * @param {string} customerData.medical_aid_provider - Medical aid provider
+   * @param {string} customerData.medical_aid_number - Medical aid number
+   * @param {string} customerData.medical_plan - Medical plan
+   * @returns {Promise<Object>} Created customer or error
+   */
+  async createCustomer(customerData) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/customers`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(customerData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Failed to create customer:', data.detail || response.statusText);
+        return {
+          success: false,
+          error: data.detail || 'Failed to create customer',
+        };
+      }
+
+      if (data.success && data.customer) {
+        return {
+          success: true,
+          customer: data.customer,
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Unexpected response format',
+      };
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      return {
+        success: false,
+        error: 'Network error. Please try again.',
+      };
+    }
+  }
 }
 
 export const customerService = new CustomerService();
