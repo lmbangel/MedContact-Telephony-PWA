@@ -8,6 +8,7 @@ import { ScreenController } from './js/ui/ScreenController.js';
 import { authService } from './js/services/AuthService.js';
 import { twilioService } from './js/services/TwilioService.js';
 import { customerService } from './js/services/CustomerService.js';
+import { API_URL } from './config.js';
 
 // Check authentication before initializing
 authService.init().then(() => {
@@ -523,13 +524,15 @@ async function handleInitTwilio() {
     }
 
     // Fetch Twilio access token from backend
-    const response = await fetch('/api/twilio/token', {
+    console.log('🔑 Fetching Twilio token from:', `${API_URL}/api/twilio/token`);
+    const response = await fetch(`${API_URL}/api/twilio/token`, {
       method: 'GET',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       }
     });
+    console.log('📡 Twilio token response status:', response.status);
 
     if (!response.ok) {
       throw new Error('Failed to fetch Twilio token from backend');

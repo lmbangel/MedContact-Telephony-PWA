@@ -160,6 +160,39 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (s
 	return q.db.ExecContext(ctx, createSession, arg.ID, arg.UserID, arg.ExpiresAt)
 }
 
+const createTask = `-- name: CreateTask :execresult
+
+INSERT INTO tasks (assigned_to, customer_id, call_id, title, description, type, status, due_date)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateTaskParams struct {
+	AssignedTo  int32          `json:"assigned_to"`
+	CustomerID  sql.NullInt32  `json:"customer_id"`
+	CallID      sql.NullInt32  `json:"call_id"`
+	Title       string         `json:"title"`
+	Description sql.NullString `json:"description"`
+	Type        sql.NullString `json:"type"`
+	Status      sql.NullString `json:"status"`
+	DueDate     sql.NullTime   `json:"due_date"`
+}
+
+// -----------------------
+// Task Queries
+// -----------------------
+func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createTask,
+		arg.AssignedTo,
+		arg.CustomerID,
+		arg.CallID,
+		arg.Title,
+		arg.Description,
+		arg.Type,
+		arg.Status,
+		arg.DueDate,
+	)
+}
+
 const createUser = `-- name: CreateUser :execresult
 INSERT INTO users (email, password_hash, firstname, lastname, agent_id, company_id)
 VALUES (?, ?, ?, ?, ?, ?)
@@ -475,6 +508,44 @@ func (q *Queries) GetCustomerPremiumsByCustomerID(ctx context.Context, customerI
 	return items, nil
 }
 
+const getCustomersByCompany = `-- name: GetCustomersByCompany :many
+SELECT id, company_id, first_name, last_name, email, phone, medical_aid_provider, medical_aid_number, medical_plan, created_at FROM customers WHERE company_id = ? ORDER BY first_name ASC, last_name ASC
+`
+
+func (q *Queries) GetCustomersByCompany(ctx context.Context, companyID int32) ([]Customer, error) {
+	rows, err := q.db.QueryContext(ctx, getCustomersByCompany, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Customer{}
+	for rows.Next() {
+		var i Customer
+		if err := rows.Scan(
+			&i.ID,
+			&i.CompanyID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Email,
+			&i.Phone,
+			&i.MedicalAidProvider,
+			&i.MedicalAidNumber,
+			&i.MedicalPlan,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLatestAgentStatus = `-- name: GetLatestAgentStatus :one
 
 SELECT id, user_id, status, created_at FROM agent_status
@@ -498,6 +569,74 @@ func (q *Queries) GetLatestAgentStatus(ctx context.Context, userID int32) (Agent
 	return i, err
 }
 
+const getOutstandingTasksCount = `-- name: GetOutstandingTasksCount :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND status != 'completed'
+`
+
+func (q *Queries) GetOutstandingTasksCount(ctx context.Context, assignedTo int32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getOutstandingTasksCount, assignedTo)
+	var task_count int64
+	err := row.Scan(&task_count)
+	return task_count, err
+}
+
+const getOverdueTasksCount = `-- name: GetOverdueTasksCount :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND status != 'completed' AND due_date IS NOT NULL AND due_date < NOW()
+`
+
+func (q *Queries) GetOverdueTasksCount(ctx context.Context, assignedTo int32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getOverdueTasksCount, assignedTo)
+	var task_count int64
+	err := row.Scan(&task_count)
+	return task_count, err
+}
+
+const getPendingTasksByUser = `-- name: GetPendingTasksByUser :many
+SELECT id, assigned_to, customer_id, call_id, title, description, type, status, due_date, created_at FROM tasks
+WHERE assigned_to = ? AND status = 'pending'
+ORDER BY due_date ASC
+`
+
+func (q *Queries) GetPendingTasksByUser(ctx context.Context, assignedTo int32) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getPendingTasksByUser, assignedTo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Task{}
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssignedTo,
+			&i.CustomerID,
+			&i.CallID,
+			&i.Title,
+			&i.Description,
+			&i.Type,
+			&i.Status,
+			&i.DueDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSession = `-- name: GetSession :one
 SELECT id, user_id, created_at, expires_at FROM sessions WHERE id = ?
 `
@@ -512,6 +651,176 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const getTaskByID = `-- name: GetTaskByID :one
+SELECT id, assigned_to, customer_id, call_id, title, description, type, status, due_date, created_at FROM tasks WHERE id = ?
+`
+
+func (q *Queries) GetTaskByID(ctx context.Context, id int32) (Task, error) {
+	row := q.db.QueryRowContext(ctx, getTaskByID, id)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.AssignedTo,
+		&i.CustomerID,
+		&i.CallID,
+		&i.Title,
+		&i.Description,
+		&i.Type,
+		&i.Status,
+		&i.DueDate,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTaskStats = `-- name: GetTaskStats :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks
+WHERE assigned_to = ?
+`
+
+type GetTaskStatsRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStats(ctx context.Context, assignedTo int32) (GetTaskStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStats, assignedTo)
+	var i GetTaskStatsRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByStatus = `-- name: GetTaskStatsByStatus :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND status = ?
+`
+
+type GetTaskStatsByStatusParams struct {
+	AssignedTo int32          `json:"assigned_to"`
+	Status     sql.NullString `json:"status"`
+}
+
+func (q *Queries) GetTaskStatsByStatus(ctx context.Context, arg GetTaskStatsByStatusParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByStatus, arg.AssignedTo, arg.Status)
+	var task_count int64
+	err := row.Scan(&task_count)
+	return task_count, err
+}
+
+const getTaskStatsByType = `-- name: GetTaskStatsByType :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND type = ?
+`
+
+type GetTaskStatsByTypeParams struct {
+	AssignedTo int32          `json:"assigned_to"`
+	Type       sql.NullString `json:"type"`
+}
+
+func (q *Queries) GetTaskStatsByType(ctx context.Context, arg GetTaskStatsByTypeParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByType, arg.AssignedTo, arg.Type)
+	var task_count int64
+	err := row.Scan(&task_count)
+	return task_count, err
+}
+
+const getTasksByUser = `-- name: GetTasksByUser :many
+SELECT id, assigned_to, customer_id, call_id, title, description, type, status, due_date, created_at FROM tasks
+WHERE assigned_to = ?
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetTasksByUser(ctx context.Context, assignedTo int32) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getTasksByUser, assignedTo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Task{}
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssignedTo,
+			&i.CustomerID,
+			&i.CallID,
+			&i.Title,
+			&i.Description,
+			&i.Type,
+			&i.Status,
+			&i.DueDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTasksDueInNext7Days = `-- name: GetTasksDueInNext7Days :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ?
+    AND status != 'completed'
+    AND due_date IS NOT NULL
+    AND due_date >= NOW()
+    AND due_date <= DATE_ADD(NOW(), INTERVAL 7 DAY)
+`
+
+func (q *Queries) GetTasksDueInNext7Days(ctx context.Context, assignedTo int32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTasksDueInNext7Days, assignedTo)
+	var task_count int64
+	err := row.Scan(&task_count)
+	return task_count, err
+}
+
+const getTasksDueToday = `-- name: GetTasksDueToday :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND DATE(due_date) = CURDATE() AND status != 'completed'
+`
+
+func (q *Queries) GetTasksDueToday(ctx context.Context, assignedTo int32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTasksDueToday, assignedTo)
+	var task_count int64
+	err := row.Scan(&task_count)
+	return task_count, err
 }
 
 const getTodayCallStats = `-- name: GetTodayCallStats :one

@@ -86,6 +86,34 @@ type CreateCustomerRequest struct {
 	MedicalPlan         string `json:"medical_plan"`
 }
 
+type CreateTaskRequest struct {
+	AssignedTo  int32   `json:"assigned_to"`
+	CustomerID  *int32  `json:"customer_id"`
+	CallID      *int32  `json:"call_id"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Type        string  `json:"type"`
+	Status      string  `json:"status"`
+	DueDate     *string `json:"due_date"`
+}
+
+type TaskResponse struct {
+	Success bool     `json:"success"`
+	Task    *db.Task `json:"task,omitempty"`
+}
+
+type TaskStatsResponse struct {
+	Success         bool  `json:"success"`
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+	OutstandingTasks int64 `json:"outstanding_tasks"`
+}
+
 type ErrorResponse struct {
 	Detail string `json:"detail"`
 }
@@ -178,7 +206,13 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "https://localhost:3000"},
+		AllowedOrigins: []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://localhost:5173", // Vite default port
+			"http://127.0.0.1:5173",
+			"https://localhost:3000",
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -202,6 +236,7 @@ func main() {
 	r.Post("/api/companies", server.createCompany)
 
 	// Customer routes
+	r.Get("/api/customers", server.getCustomers)
 	r.Get("/api/customers/by-phone", server.getCustomerByPhone)
 	r.Post("/api/customers", server.createCustomer)
 
@@ -213,6 +248,11 @@ func main() {
 	r.Post("/api/calls", server.createCallRecord)
 	r.Put("/api/calls/{call_sid}", server.updateCallRecord)
 	r.Get("/api/calls/stats", server.getCallStats)
+
+	// Task routes
+	r.Post("/api/tasks", server.createTask)
+	r.Get("/api/tasks", server.getTasks)
+	r.Get("/api/tasks/stats", server.getTaskStats)
 
 	// Twilio routes
 	r.Get("/api/twilio/token", server.getTwilioToken)
@@ -559,6 +599,52 @@ func (s *Server) createCompany(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) getCustomers(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Get user to access company_id
+	user, err := s.queries.GetUserByID(r.Context(), session.UserID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	log.Printf("📋 Fetching customers for company ID: %d", user.CompanyID)
+
+	// Get customers for the user's company
+	customers, err := s.queries.GetCustomersByCompany(r.Context(), user.CompanyID)
+	if err != nil {
+		log.Printf("❌ Failed to get customers: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get customers")
+		return
+	}
+
+	log.Printf("✅ Found %d customers for company ID: %d", len(customers), user.CompanyID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"customers": customers,
+	})
+}
+
 func (s *Server) getCustomerByPhone(w http.ResponseWriter, r *http.Request) {
 	phone := r.URL.Query().Get("phone")
 	if phone == "" {
@@ -730,6 +816,278 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(CustomerResponse{
 		Success:  true,
 		Customer: &customer,
+	})
+}
+
+func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Parse request body
+	var req CreateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if req.Title == "" {
+		respondError(w, http.StatusBadRequest, "Title is required")
+		return
+	}
+
+	if req.AssignedTo <= 0 {
+		respondError(w, http.StatusBadRequest, "Valid assigned_to user ID is required")
+		return
+	}
+
+	log.Printf("📝 Creating task: %s (Assigned to: %d)", req.Title, req.AssignedTo)
+
+	// Prepare nullable fields
+	var customerID sql.NullInt32
+	if req.CustomerID != nil {
+		customerID = sql.NullInt32{Int32: *req.CustomerID, Valid: true}
+	}
+
+	var callID sql.NullInt32
+	if req.CallID != nil {
+		callID = sql.NullInt32{Int32: *req.CallID, Valid: true}
+	}
+
+	var dueDate sql.NullTime
+	if req.DueDate != nil && *req.DueDate != "" {
+		parsedTime, err := time.Parse(time.RFC3339, *req.DueDate)
+		if err != nil {
+			// Try alternate format for datetime-local input
+			parsedTime, err = time.Parse("2006-01-02T15:04", *req.DueDate)
+			if err != nil {
+				respondError(w, http.StatusBadRequest, "Invalid due_date format")
+				return
+			}
+		}
+		dueDate = sql.NullTime{Time: parsedTime, Valid: true}
+	}
+
+	// Set defaults for type and status if empty
+	taskType := req.Type
+	if taskType == "" {
+		taskType = "task"
+	}
+
+	taskStatus := req.Status
+	if taskStatus == "" {
+		taskStatus = "pending"
+	}
+
+	// Create task in database
+	result, err := s.queries.CreateTask(r.Context(), db.CreateTaskParams{
+		AssignedTo: req.AssignedTo,
+		CustomerID: customerID,
+		CallID:     callID,
+		Title:      req.Title,
+		Description: sql.NullString{
+			String: req.Description,
+			Valid:  req.Description != "",
+		},
+		Type: sql.NullString{
+			String: taskType,
+			Valid:  true,
+		},
+		Status: sql.NullString{
+			String: taskStatus,
+			Valid:  true,
+		},
+		DueDate: dueDate,
+	})
+	if err != nil {
+		log.Printf("❌ Failed to create task: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to create task")
+		return
+	}
+
+	// Get the inserted task ID
+	taskID, err := result.LastInsertId()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get task ID")
+		return
+	}
+
+	// Fetch the created task
+	task, err := s.queries.GetTaskByID(r.Context(), int32(taskID))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get task")
+		return
+	}
+
+	log.Printf("✅ Task created successfully: %s (ID: %d)", task.Title, task.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(TaskResponse{
+		Success: true,
+		Task:    &task,
+	})
+}
+
+func (s *Server) getTasks(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Get tasks for the logged-in user
+	tasks, err := s.queries.GetTasksByUser(r.Context(), session.UserID)
+	if err != nil {
+		log.Printf("❌ Failed to get tasks: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get tasks")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"tasks":   tasks,
+	})
+}
+
+func (s *Server) getTaskStats(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Parse optional query parameters for filtering
+	taskType := r.URL.Query().Get("type")     // e.g., "follow-up", "callback"
+	timeFilter := r.URL.Query().Get("time")   // e.g., "overdue", "today", "next7days"
+
+	// If specific type is requested, return count for that type
+	if taskType != "" && taskType != "all" {
+		count, err := s.queries.GetTaskStatsByType(r.Context(), db.GetTaskStatsByTypeParams{
+			AssignedTo: session.UserID,
+			Type: sql.NullString{
+				String: taskType,
+				Valid:  true,
+			},
+		})
+		if err != nil {
+			log.Printf("❌ Failed to get task stats by type: %v", err)
+			respondError(w, http.StatusInternalServerError, "Failed to get task stats")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(TaskStatsResponse{
+			Success:      true,
+			PendingTasks: count,
+		})
+		return
+	}
+
+	// If time filter is specified, return count for that time range
+	if timeFilter != "" && timeFilter != "all" {
+		var count int64
+		var err error
+
+		switch timeFilter {
+		case "overdue":
+			count, err = s.queries.GetOverdueTasksCount(r.Context(), session.UserID)
+		case "today":
+			count, err = s.queries.GetTasksDueToday(r.Context(), session.UserID)
+		case "next7days":
+			count, err = s.queries.GetTasksDueInNext7Days(r.Context(), session.UserID)
+		default:
+			respondError(w, http.StatusBadRequest, "Invalid time filter")
+			return
+		}
+
+		if err != nil {
+			log.Printf("❌ Failed to get task stats by time filter: %v", err)
+			respondError(w, http.StatusInternalServerError, "Failed to get task stats")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(TaskStatsResponse{
+			Success:      true,
+			PendingTasks: count,
+		})
+		return
+	}
+
+	// Get all task statistics (default)
+	stats, err := s.queries.GetTaskStats(r.Context(), session.UserID)
+	if err != nil {
+		log.Printf("❌ Failed to get task stats: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get task stats")
+		return
+	}
+
+	// Get outstanding tasks count (non-completed)
+	outstandingCount, err := s.queries.GetOutstandingTasksCount(r.Context(), session.UserID)
+	if err != nil {
+		log.Printf("❌ Failed to get outstanding tasks count: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get outstanding tasks count")
+		return
+	}
+
+	log.Printf("✅ Task stats retrieved for user ID %d: Pending=%d, Outstanding=%d, Follow-ups=%d",
+		session.UserID, stats.PendingTasks, outstandingCount, stats.FollowUpTasks)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(TaskStatsResponse{
+		Success:          true,
+		TotalTasks:       stats.TotalTasks,
+		PendingTasks:     stats.PendingTasks,
+		InProgressTasks:  stats.InProgressTasks,
+		CompletedTasks:   stats.CompletedTasks,
+		FollowUpTasks:    stats.FollowUpTasks,
+		CallbackTasks:    stats.CallbackTasks,
+		OverdueTasks:     stats.OverdueTasks,
+		OutstandingTasks: outstandingCount,
 	})
 }
 

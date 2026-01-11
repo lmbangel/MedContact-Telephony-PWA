@@ -3,7 +3,8 @@
  * Handles customer lookup and information retrieval
  */
 
-const API_BASE_URL = 'http://localhost:3000';
+import { API_BASE_URL } from '../../config.js';
+
 
 class CustomerService {
   /**
@@ -68,6 +69,60 @@ class CustomerService {
   }
 
   /**
+   * Get all customers for the current user's company
+   * @returns {Promise<Object>} Customers list or error
+   */
+  async getCustomersByCompany() {
+    try {
+      const url = `${API_BASE_URL}/api/customers`;
+      console.log('🔍 Fetching customers from:', url);
+      console.log('📍 API_BASE_URL:', API_BASE_URL);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('📡 Response status:', response.status, response.statusText);
+      console.log('📡 Response headers:', Object.fromEntries([...response.headers.entries()]));
+
+      const data = await response.json();
+      console.log('📦 Response data:', data);
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch customers:', data.detail || response.statusText);
+        return {
+          success: false,
+          error: data.detail || 'Failed to fetch customers',
+        };
+      }
+
+      if (data.success && data.customers) {
+        console.log('✅ Successfully loaded', data.customers.length, 'customers');
+        return {
+          success: true,
+          customers: data.customers,
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Unexpected response format',
+      };
+    } catch (error) {
+      console.error('❌ Network error fetching customers:', error);
+      console.error('❌ Error details:', error.message, error.stack);
+      return {
+        success: false,
+        error: 'Network error. Please try again.',
+      };
+    }
+  }
+
+  /**
    * Create a new customer
    * @param {Object} customerData - Customer data
    * @param {string} customerData.first_name - First name
@@ -81,7 +136,11 @@ class CustomerService {
    */
   async createCustomer(customerData) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/customers`, {
+      const url = `${API_BASE_URL}/api/customers`;
+      console.log('➕ Creating customer at:', url);
+      console.log('📤 Request data:', customerData);
+
+      const response = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -90,10 +149,13 @@ class CustomerService {
         body: JSON.stringify(customerData),
       });
 
+      console.log('📡 Response status:', response.status, response.statusText);
+
       const data = await response.json();
+      console.log('📦 Response data:', data);
 
       if (!response.ok) {
-        console.error('Failed to create customer:', data.detail || response.statusText);
+        console.error('❌ Failed to create customer:', data.detail || response.statusText);
         return {
           success: false,
           error: data.detail || 'Failed to create customer',
@@ -101,6 +163,7 @@ class CustomerService {
       }
 
       if (data.success && data.customer) {
+        console.log('✅ Customer created successfully:', data.customer);
         return {
           success: true,
           customer: data.customer,
@@ -112,7 +175,8 @@ class CustomerService {
         error: 'Unexpected response format',
       };
     } catch (error) {
-      console.error('Error creating customer:', error);
+      console.error('❌ Network error creating customer:', error);
+      console.error('❌ Error details:', error.message, error.stack);
       return {
         success: false,
         error: 'Network error. Please try again.',

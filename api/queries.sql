@@ -46,6 +46,9 @@ SELECT * FROM customers WHERE phone = ?;
 -- name: GetAllCustomers :many
 SELECT * FROM customers ORDER BY created_at DESC;
 
+-- name: GetCustomersByCompany :many
+SELECT * FROM customers WHERE company_id = ? ORDER BY first_name ASC, last_name ASC;
+
 -- name: CreateCustomer :execresult
 INSERT INTO customers (company_id, first_name, last_name, email, phone, medical_aid_provider, medical_aid_number, medical_plan)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
@@ -131,3 +134,76 @@ SELECT * FROM transcriptions
 WHERE agent_id = ?
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?;
+
+-- -----------------------
+-- Task Queries
+-- -----------------------
+
+-- name: CreateTask :execresult
+INSERT INTO tasks (assigned_to, customer_id, call_id, title, description, type, status, due_date)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetTaskByID :one
+SELECT * FROM tasks WHERE id = ?;
+
+-- name: GetTasksByUser :many
+SELECT * FROM tasks
+WHERE assigned_to = ?
+ORDER BY created_at DESC;
+
+-- name: GetPendingTasksByUser :many
+SELECT * FROM tasks
+WHERE assigned_to = ? AND status = 'pending'
+ORDER BY due_date ASC;
+
+-- name: GetTaskStats :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks
+WHERE assigned_to = ?;
+
+-- name: GetTaskStatsByType :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND type = ?;
+
+-- name: GetTaskStatsByStatus :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND status = ?;
+
+-- name: GetOutstandingTasksCount :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND status != 'completed';
+
+-- name: GetOverdueTasksCount :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND status != 'completed' AND due_date IS NOT NULL AND due_date < NOW();
+
+-- name: GetTasksDueToday :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ? AND DATE(due_date) = CURDATE() AND status != 'completed';
+
+-- name: GetTasksDueInNext7Days :one
+SELECT
+    COUNT(*) as task_count
+FROM tasks
+WHERE assigned_to = ?
+    AND status != 'completed'
+    AND due_date IS NOT NULL
+    AND due_date >= NOW()
+    AND due_date <= DATE_ADD(NOW(), INTERVAL 7 DAY);

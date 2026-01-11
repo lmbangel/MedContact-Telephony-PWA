@@ -216,6 +216,7 @@
           Log Call
         </button>
         <button
+          id="createTaskBtn"
           class="px-4 py-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-lg text-sm font-medium transition flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -223,6 +224,7 @@
           Create Task
         </button>
         <button
+          id="scheduleFollowUpBtn"
           class="px-4 py-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-lg text-sm font-medium transition flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -267,18 +269,19 @@
             </div>
           </div>
           <div class="flex gap-4 text-xs">
-            <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
-              <option class="text-gray-700">All Types</option>
-              <option class="text-gray-700">Follow-up</option>
-              <option class="text-gray-700">Callback</option>
+            <select id="taskTypeFilter" class="bg-white/10 border-0 rounded px-3 py-2 text-white">
+              <option value="all" class="text-gray-700">All Types</option>
+              <option value="follow-up" class="text-gray-700">Follow-up</option>
+              <option value="callback" class="text-gray-700">Callback</option>
             </select>
             <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
               <option>All Agents</option>
             </select>
-            <select class="bg-white/10 border-0 rounded px-3 py-2 text-white">
-              <option class="text-gray-700">Overdue</option>
-              <option class="text-gray-700">Due Today</option>
-              <option class="text-gray-700">Next 7 days</option>
+            <select id="taskTimeFilter" class="bg-white/10 border-0 rounded px-3 py-2 text-white">
+              <option value="all" class="text-gray-700">All</option>
+              <option value="overdue" class="text-gray-700">Overdue</option>
+              <option value="today" class="text-gray-700">Due Today</option>
+              <option value="next7days" class="text-gray-700">Next 7 days</option>
             </select>
           </div>
         </div>
@@ -697,6 +700,278 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
             </svg>
             Add Customer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Task Modal -->
+  <div id="createTaskModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+      <!-- Modal Header -->
+      <div class="bg-[#1e3a5f] text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
+        <h2 class="text-xl font-semibold">Create New Task</h2>
+        <button id="closeTaskModalBtn" class="text-white hover:text-gray-300 transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <form id="createTaskForm" class="p-6">
+        <!-- Error/Success Message -->
+        <div id="taskFormMessage" class="hidden mb-4 p-3 rounded-lg"></div>
+
+        <!-- Task Information Section -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Task Details</h3>
+          <div class="space-y-4">
+            <!-- Title -->
+            <div>
+              <label for="taskTitle" class="block text-sm font-medium text-gray-700 mb-1">
+                Title <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="taskTitle"
+                name="taskTitle"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Follow up on claim"
+              />
+            </div>
+
+            <!-- Description -->
+            <div>
+              <label for="taskDescription" class="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                id="taskDescription"
+                name="taskDescription"
+                rows="3"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Add details about the task..."
+              ></textarea>
+            </div>
+
+            <!-- Type and Status -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Type -->
+              <div>
+                <label for="taskType" class="block text-sm font-medium text-gray-700 mb-1">
+                  Type
+                </label>
+                <select
+                  id="taskType"
+                  name="taskType"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="task">Task</option>
+                  <option value="follow-up">Follow-up</option>
+                  <option value="callback">Callback</option>
+                  <option value="review">Review</option>
+                </select>
+              </div>
+
+              <!-- Status -->
+              <div>
+                <label for="taskStatus" class="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  id="taskStatus"
+                  name="taskStatus"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Due Date -->
+            <div>
+              <label for="taskDueDate" class="block text-sm font-medium text-gray-700 mb-1">
+                Due Date
+              </label>
+              <input
+                type="datetime-local"
+                id="taskDueDate"
+                name="taskDueDate"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Optional Associations Section -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Optional Associations</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Customer Select -->
+            <div>
+              <label for="taskCustomerId" class="block text-sm font-medium text-gray-700 mb-1">
+                Customer
+              </label>
+              <select
+                id="taskCustomerId"
+                name="taskCustomerId"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">-- No customer --</option>
+                <!-- Options will be populated dynamically -->
+              </select>
+              <p class="text-xs text-gray-500 mt-1">Select a customer to associate with this task</p>
+            </div>
+
+            <!-- Call ID -->
+            <div>
+              <label for="taskCallId" class="block text-sm font-medium text-gray-700 mb-1">
+                Call ID
+              </label>
+              <input
+                type="number"
+                id="taskCallId"
+                name="taskCallId"
+                min="1"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Optional"
+              />
+              <p class="text-xs text-gray-500 mt-1">Leave empty if not associated with a call</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-end gap-3 pt-4 border-t">
+          <button
+            type="button"
+            id="cancelTaskBtn"
+            class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="submitTaskBtn"
+            class="px-4 py-2 bg-rose-500 text-white hover:bg-rose-600 rounded-lg font-medium transition flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Create Task
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Schedule Follow-up Modal -->
+  <div id="scheduleFollowUpModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+      <!-- Modal Header -->
+      <div class="bg-[#1e3a5f] text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
+        <h2 class="text-xl font-semibold">Schedule Follow-up</h2>
+        <button id="closeFollowUpModalBtn" class="text-white hover:text-gray-300 transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <form id="scheduleFollowUpForm" class="p-6">
+        <!-- Error/Success Message -->
+        <div id="followUpFormMessage" class="hidden mb-4 p-3 rounded-lg"></div>
+
+        <!-- Follow-up Information Section -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Follow-up Details</h3>
+          <div class="space-y-4">
+            <!-- Customer Select -->
+            <div>
+              <label for="followUpCustomerId" class="block text-sm font-medium text-gray-700 mb-1">
+                Customer <span class="text-red-500">*</span>
+              </label>
+              <select
+                id="followUpCustomerId"
+                name="followUpCustomerId"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">-- Select a customer --</option>
+                <!-- Options will be populated dynamically -->
+              </select>
+              <p class="text-xs text-gray-500 mt-1">Select the customer for this follow-up</p>
+            </div>
+
+            <!-- Follow-up Date & Time -->
+            <div>
+              <label for="followUpDateTime" class="block text-sm font-medium text-gray-700 mb-1">
+                Follow-up Date & Time <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="datetime-local"
+                id="followUpDateTime"
+                name="followUpDateTime"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <!-- Title -->
+            <div>
+              <label for="followUpTitle" class="block text-sm font-medium text-gray-700 mb-1">
+                Title <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="followUpTitle"
+                name="followUpTitle"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Follow up on premium inquiry"
+              />
+            </div>
+
+            <!-- Notes -->
+            <div>
+              <label for="followUpNotes" class="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                id="followUpNotes"
+                name="followUpNotes"
+                rows="3"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Add any details or notes for this follow-up..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex justify-end gap-3 pt-4 border-t">
+          <button
+            type="button"
+            id="cancelFollowUpBtn"
+            class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            id="submitFollowUpBtn"
+            class="px-4 py-2 bg-rose-500 text-white hover:bg-rose-600 rounded-lg font-medium transition flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            Schedule Follow-up
           </button>
         </div>
       </form>
