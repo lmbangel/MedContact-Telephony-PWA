@@ -34,6 +34,19 @@ type CallOutcome struct {
 	CreatedAt sql.NullTime   `json:"created_at"`
 }
 
+type CallQueue struct {
+	ID                int32          `json:"id"`
+	CallSid           string         `json:"call_sid"`
+	CompanyID         int32          `json:"company_id"`
+	FromNumber        string         `json:"from_number"`
+	ToNumber          string         `json:"to_number"`
+	Status            sql.NullString `json:"status"`
+	CurrentAgentIndex sql.NullInt32  `json:"current_agent_index"`
+	AgentsTried       sql.NullString `json:"agents_tried"`
+	CreatedAt         sql.NullTime   `json:"created_at"`
+	UpdatedAt         sql.NullTime   `json:"updated_at"`
+}
+
 type Company struct {
 	ID        int32        `json:"id"`
 	Name      string       `json:"name"`
@@ -122,12 +135,13 @@ type Transcription struct {
 }
 
 type User struct {
-	ID           int32        `json:"id"`
-	Email        string       `json:"email"`
-	PasswordHash string       `json:"password_hash"`
-	Firstname    string       `json:"firstname"`
-	Lastname     string       `json:"lastname"`
-	AgentID      string       `json:"agent_id"`
-	CompanyID    int32        `json:"company_id"`
-	CreatedAt    sql.NullTime `json:"created_at"`
+	ID              int32        `json:"id"`
+	Email           string       `json:"email"`
+	PasswordHash    string       `json:"password_hash"`
+	Firstname       string       `json:"firstname"`
+	Lastname        string       `json:"lastname"`
+	AgentID         string       `json:"agent_id"`
+	CompanyID       int32        `json:"company_id"`
+	LastCallEndedAt sql.NullTime `json:"last_call_ended_at"`
+	CreatedAt       sql.NullTime `json:"created_at"`
 }

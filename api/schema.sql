@@ -21,10 +21,12 @@ CREATE TABLE IF NOT EXISTS users (
     lastname VARCHAR(100) NOT NULL,
     agent_id VARCHAR(50) NOT NULL UNIQUE,
     company_id INT NOT NULL,
+    last_call_ended_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_email (email),
     INDEX idx_agent_id (agent_id),
     INDEX idx_company_id (company_id),
+    INDEX idx_last_call_ended_at (last_call_ended_at),
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -161,6 +163,25 @@ CREATE TABLE IF NOT EXISTS agent_status (
     INDEX idx_user_id (user_id),
     INDEX idx_created_at (created_at),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Call queue table for callers waiting for an agent (sequential routing)
+CREATE TABLE IF NOT EXISTS call_queue (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    call_sid VARCHAR(255) NOT NULL UNIQUE,
+    company_id INT NOT NULL,
+    from_number VARCHAR(50) NOT NULL,
+    to_number VARCHAR(50) NOT NULL,
+    status VARCHAR(50) DEFAULT 'waiting',
+    current_agent_index INT DEFAULT 0,
+    agents_tried TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_call_sid (call_sid),
+    INDEX idx_company_id (company_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Customer premiums table

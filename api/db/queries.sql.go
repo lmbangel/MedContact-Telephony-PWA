@@ -145,6 +145,31 @@ func (q *Queries) CreateOTPCode(ctx context.Context, arg CreateOTPCodeParams) (s
 	return q.db.ExecContext(ctx, createOTPCode, arg.Email, arg.OtpCode, arg.ExpiresAt)
 }
 
+const createQueueEntry = `-- name: CreateQueueEntry :execresult
+
+INSERT INTO call_queue (call_sid, company_id, from_number, to_number, status, agents_tried)
+VALUES (?, ?, ?, ?, 'waiting', '[]')
+`
+
+type CreateQueueEntryParams struct {
+	CallSid    string `json:"call_sid"`
+	CompanyID  int32  `json:"company_id"`
+	FromNumber string `json:"from_number"`
+	ToNumber   string `json:"to_number"`
+}
+
+// -----------------------
+// Call Queue Queries
+// -----------------------
+func (q *Queries) CreateQueueEntry(ctx context.Context, arg CreateQueueEntryParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createQueueEntry,
+		arg.CallSid,
+		arg.CompanyID,
+		arg.FromNumber,
+		arg.ToNumber,
+	)
+}
+
 const createSession = `-- name: CreateSession :execresult
 INSERT INTO sessions (id, user_id, expires_at)
 VALUES (?, ?, ?)
@@ -224,6 +249,15 @@ DELETE FROM otp_codes WHERE expires_at < NOW() OR used = 1
 
 func (q *Queries) DeleteExpiredOTPCodes(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, deleteExpiredOTPCodes)
+	return err
+}
+
+const deleteQueueEntry = `-- name: DeleteQueueEntry :exec
+DELETE FROM call_queue WHERE call_sid = ?
+`
+
+func (q *Queries) DeleteQueueEntry(ctx context.Context, callSid string) error {
+	_, err := q.db.ExecContext(ctx, deleteQueueEntry, callSid)
 	return err
 }
 
@@ -344,6 +378,101 @@ func (q *Queries) GetAllCustomers(ctx context.Context) ([]Customer, error) {
 			&i.MedicalAidNumber,
 			&i.MedicalPlan,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllUsersByCompany = `-- name: GetAllUsersByCompany :many
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE company_id = ? ORDER BY id ASC
+`
+
+func (q *Queries) GetAllUsersByCompany(ctx context.Context, companyID int32) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, getAllUsersByCompany, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Firstname,
+			&i.Lastname,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.LastCallEndedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAvailableAgentsByCompanyLongestIdle = `-- name: GetAvailableAgentsByCompanyLongestIdle :many
+
+SELECT u.id, u.agent_id, u.firstname, u.lastname, u.company_id, u.last_call_ended_at
+FROM users u
+INNER JOIN (
+    SELECT user_id, MAX(created_at) as latest_status_time
+    FROM agent_status
+    GROUP BY user_id
+) latest_status ON u.id = latest_status.user_id
+INNER JOIN agent_status ast ON u.id = ast.user_id
+    AND ast.created_at = latest_status.latest_status_time
+WHERE u.company_id = ?
+    AND ast.status = 'available'
+ORDER BY COALESCE(u.last_call_ended_at, '1970-01-01 00:00:00') ASC, u.id ASC
+`
+
+type GetAvailableAgentsByCompanyLongestIdleRow struct {
+	ID              int32        `json:"id"`
+	AgentID         string       `json:"agent_id"`
+	Firstname       string       `json:"firstname"`
+	Lastname        string       `json:"lastname"`
+	CompanyID       int32        `json:"company_id"`
+	LastCallEndedAt sql.NullTime `json:"last_call_ended_at"`
+}
+
+// -----------------------
+// Sequential Call Routing Queries
+// -----------------------
+func (q *Queries) GetAvailableAgentsByCompanyLongestIdle(ctx context.Context, companyID int32) ([]GetAvailableAgentsByCompanyLongestIdleRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAvailableAgentsByCompanyLongestIdle, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAvailableAgentsByCompanyLongestIdleRow{}
+	for rows.Next() {
+		var i GetAvailableAgentsByCompanyLongestIdleRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Firstname,
+			&i.Lastname,
+			&i.CompanyID,
+			&i.LastCallEndedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -569,6 +698,31 @@ func (q *Queries) GetLatestAgentStatus(ctx context.Context, userID int32) (Agent
 	return i, err
 }
 
+const getOldestWaitingCall = `-- name: GetOldestWaitingCall :one
+SELECT id, call_sid, company_id, from_number, to_number, status, current_agent_index, agents_tried, created_at, updated_at FROM call_queue
+WHERE company_id = ? AND status = 'waiting'
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+func (q *Queries) GetOldestWaitingCall(ctx context.Context, companyID int32) (CallQueue, error) {
+	row := q.db.QueryRowContext(ctx, getOldestWaitingCall, companyID)
+	var i CallQueue
+	err := row.Scan(
+		&i.ID,
+		&i.CallSid,
+		&i.CompanyID,
+		&i.FromNumber,
+		&i.ToNumber,
+		&i.Status,
+		&i.CurrentAgentIndex,
+		&i.AgentsTried,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOutstandingTasksCount = `-- name: GetOutstandingTasksCount :one
 SELECT
     COUNT(*) as task_count
@@ -635,6 +789,28 @@ func (q *Queries) GetPendingTasksByUser(ctx context.Context, assignedTo int32) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const getQueueEntry = `-- name: GetQueueEntry :one
+SELECT id, call_sid, company_id, from_number, to_number, status, current_agent_index, agents_tried, created_at, updated_at FROM call_queue WHERE call_sid = ?
+`
+
+func (q *Queries) GetQueueEntry(ctx context.Context, callSid string) (CallQueue, error) {
+	row := q.db.QueryRowContext(ctx, getQueueEntry, callSid)
+	var i CallQueue
+	err := row.Scan(
+		&i.ID,
+		&i.CallSid,
+		&i.CompanyID,
+		&i.FromNumber,
+		&i.ToNumber,
+		&i.Status,
+		&i.CurrentAgentIndex,
+		&i.AgentsTried,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getSession = `-- name: GetSession :one
@@ -854,7 +1030,7 @@ func (q *Queries) GetTodayCallStats(ctx context.Context, agentID sql.NullInt32) 
 }
 
 const getUserByAgentID = `-- name: GetUserByAgentID :one
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, created_at FROM users WHERE agent_id = ?
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE agent_id = ?
 `
 
 func (q *Queries) GetUserByAgentID(ctx context.Context, agentID string) (User, error) {
@@ -868,13 +1044,14 @@ func (q *Queries) GetUserByAgentID(ctx context.Context, agentID string) (User, e
 		&i.Lastname,
 		&i.AgentID,
 		&i.CompanyID,
+		&i.LastCallEndedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, created_at FROM users WHERE email = ?
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE email = ?
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -888,13 +1065,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Lastname,
 		&i.AgentID,
 		&i.CompanyID,
+		&i.LastCallEndedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, created_at FROM users WHERE id = ?
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
@@ -908,6 +1086,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 		&i.Lastname,
 		&i.AgentID,
 		&i.CompanyID,
+		&i.LastCallEndedAt,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -938,12 +1117,79 @@ func (q *Queries) GetValidOTPCode(ctx context.Context, arg GetValidOTPCodeParams
 	return i, err
 }
 
+const getWaitingCallsByCompany = `-- name: GetWaitingCallsByCompany :many
+SELECT id, call_sid, company_id, from_number, to_number, status, current_agent_index, agents_tried, created_at, updated_at FROM call_queue
+WHERE company_id = ? AND status = 'waiting'
+ORDER BY created_at ASC
+`
+
+func (q *Queries) GetWaitingCallsByCompany(ctx context.Context, companyID int32) ([]CallQueue, error) {
+	rows, err := q.db.QueryContext(ctx, getWaitingCallsByCompany, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CallQueue{}
+	for rows.Next() {
+		var i CallQueue
+		if err := rows.Scan(
+			&i.ID,
+			&i.CallSid,
+			&i.CompanyID,
+			&i.FromNumber,
+			&i.ToNumber,
+			&i.Status,
+			&i.CurrentAgentIndex,
+			&i.AgentsTried,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOTPCodeAsUsed = `-- name: MarkOTPCodeAsUsed :exec
 UPDATE otp_codes SET used = 1 WHERE id = ?
 `
 
 func (q *Queries) MarkOTPCodeAsUsed(ctx context.Context, id int32) error {
 	_, err := q.db.ExecContext(ctx, markOTPCodeAsUsed, id)
+	return err
+}
+
+const markQueueEntryAbandoned = `-- name: MarkQueueEntryAbandoned :exec
+UPDATE call_queue SET status = 'abandoned', updated_at = NOW() WHERE call_sid = ?
+`
+
+func (q *Queries) MarkQueueEntryAbandoned(ctx context.Context, callSid string) error {
+	_, err := q.db.ExecContext(ctx, markQueueEntryAbandoned, callSid)
+	return err
+}
+
+const markQueueEntryConnected = `-- name: MarkQueueEntryConnected :exec
+UPDATE call_queue SET status = 'connected', updated_at = NOW() WHERE call_sid = ?
+`
+
+func (q *Queries) MarkQueueEntryConnected(ctx context.Context, callSid string) error {
+	_, err := q.db.ExecContext(ctx, markQueueEntryConnected, callSid)
+	return err
+}
+
+const markQueueEntryRouting = `-- name: MarkQueueEntryRouting :exec
+UPDATE call_queue SET status = 'routing', updated_at = NOW() WHERE call_sid = ?
+`
+
+func (q *Queries) MarkQueueEntryRouting(ctx context.Context, callSid string) error {
+	_, err := q.db.ExecContext(ctx, markQueueEntryRouting, callSid)
 	return err
 }
 
@@ -961,5 +1207,56 @@ type UpdateCallRecordParams struct {
 
 func (q *Queries) UpdateCallRecord(ctx context.Context, arg UpdateCallRecordParams) error {
 	_, err := q.db.ExecContext(ctx, updateCallRecord, arg.CallStatus, arg.Duration, arg.CallSid)
+	return err
+}
+
+const updateQueueEntry = `-- name: UpdateQueueEntry :exec
+UPDATE call_queue
+SET status = ?, current_agent_index = ?, agents_tried = ?, updated_at = NOW()
+WHERE call_sid = ?
+`
+
+type UpdateQueueEntryParams struct {
+	Status            sql.NullString `json:"status"`
+	CurrentAgentIndex sql.NullInt32  `json:"current_agent_index"`
+	AgentsTried       sql.NullString `json:"agents_tried"`
+	CallSid           string         `json:"call_sid"`
+}
+
+func (q *Queries) UpdateQueueEntry(ctx context.Context, arg UpdateQueueEntryParams) error {
+	_, err := q.db.ExecContext(ctx, updateQueueEntry,
+		arg.Status,
+		arg.CurrentAgentIndex,
+		arg.AgentsTried,
+		arg.CallSid,
+	)
+	return err
+}
+
+const updateQueueStatus = `-- name: UpdateQueueStatus :exec
+UPDATE call_queue SET status = ?, updated_at = NOW() WHERE call_sid = ?
+`
+
+type UpdateQueueStatusParams struct {
+	Status  sql.NullString `json:"status"`
+	CallSid string         `json:"call_sid"`
+}
+
+func (q *Queries) UpdateQueueStatus(ctx context.Context, arg UpdateQueueStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateQueueStatus, arg.Status, arg.CallSid)
+	return err
+}
+
+const updateUserLastCallEnded = `-- name: UpdateUserLastCallEnded :exec
+UPDATE users SET last_call_ended_at = ? WHERE id = ?
+`
+
+type UpdateUserLastCallEndedParams struct {
+	LastCallEndedAt sql.NullTime `json:"last_call_ended_at"`
+	ID              int32        `json:"id"`
+}
+
+func (q *Queries) UpdateUserLastCallEnded(ctx context.Context, arg UpdateUserLastCallEndedParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserLastCallEnded, arg.LastCallEndedAt, arg.ID)
 	return err
 }

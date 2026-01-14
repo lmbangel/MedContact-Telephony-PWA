@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -21,6 +22,8 @@ import (
 	"github.com/go-chi/cors"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	"github.com/twilio/twilio-go"
+	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 	twilioJwt "github.com/twilio/twilio-go/client/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -262,6 +265,14 @@ func main() {
 	r.Get("/twilio/outbound-voice", server.handleOutboundVoice)
 	r.Post("/twilio/incoming-call", server.handleIncomingCall)
 	r.Get("/twilio/incoming-call", server.handleIncomingCall)
+
+	// Sequential call routing webhooks
+	r.Post("/twilio/dial-callback", server.handleDialCallback)
+	r.Get("/twilio/dial-callback", server.handleDialCallback)
+	r.Post("/twilio/queue-wait", server.handleQueueWait)
+	r.Get("/twilio/queue-wait", server.handleQueueWait)
+	r.Post("/twilio/dequeue-dial", server.handleDequeueDial)
+	r.Get("/twilio/dequeue-dial", server.handleDequeueDial)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -1160,6 +1171,13 @@ func (s *Server) updateAgentStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get user to find company_id and agent_id
+	user, err := s.queries.GetUserByID(r.Context(), session.UserID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
 	// Parse request body
 	var req struct {
 		Status string `json:"status"`
@@ -1194,6 +1212,11 @@ func (s *Server) updateAgentStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("✅ Agent status updated to '%s' for user ID: %d", req.Status, session.UserID)
+
+	// If agent became available, check for queued calls in their company
+	if req.Status == "available" {
+		go s.checkQueueForAgent(user.CompanyID, user.AgentID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1337,30 +1360,335 @@ func (s *Server) handleIncomingCall(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("📞 Incoming call: From=%s, To=%s, CallSID=%s", from, to, callSID)
 
-	// Get the first agent from the database to route the call to
-	// In a production system, you'd implement proper call routing logic
-	var agentID string
-	query := `SELECT agent_id FROM users LIMIT 1`
-	err := s.db.QueryRow(query).Scan(&agentID)
+	// For now, use company_id = 1 as default
+	// In production, you'd map the Twilio phone number to a company
+	companyID := int32(1)
+
+	// Get available agents for this company, ordered by longest idle
+	agents, err := s.queries.GetAvailableAgentsByCompanyLongestIdle(r.Context(), companyID)
 	if err != nil {
-		log.Printf("Error getting agent: %v", err)
-		agentID = "agent001" // Fallback to default agent
+		log.Printf("Error getting available agents: %v", err)
 	}
 
-	log.Printf("Routing call to agent: %s", agentID)
+	if len(agents) == 0 {
+		// No agents available - put caller in queue
+		log.Printf("📋 No available agents, putting caller in queue")
+		s.putCallerInQueue(w, r, callSID, companyID, from, to)
+		return
+	}
 
-	// Return TwiML to route the call to the agent's browser
+	// Create queue entry to track routing state
+	_, err = s.queries.CreateQueueEntry(r.Context(), db.CreateQueueEntryParams{
+		CallSid:    callSID,
+		CompanyID:  companyID,
+		FromNumber: from,
+		ToNumber:   to,
+	})
+	if err != nil {
+		log.Printf("Error creating queue entry: %v", err)
+	}
+
+	// Start sequential routing with first agent (longest idle)
+	log.Printf("📞 Starting sequential routing, first agent: %s (idle since: %v)",
+		agents[0].AgentID, agents[0].LastCallEndedAt)
+	s.dialAgent(w, agents[0].AgentID, callSID)
+}
+
+// dialAgent generates TwiML to dial a specific agent with callback
+func (s *Server) dialAgent(w http.ResponseWriter, agentID, callSID string) {
+	webhookBase := os.Getenv("WEBHOOK_BASE_URL")
+	if webhookBase == "" {
+		webhookBase = "http://localhost:8000"
+	}
+
+	actionURL := fmt.Sprintf("%s/twilio/dial-callback", webhookBase)
+
 	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-	<Say>Welcome to OmniCall. Please wait while we connect you to an agent.</Say>
-	<Dial>
+	<Say>Please wait while we connect you to an agent.</Say>
+	<Dial timeout="15" action="%s">
 		<Client>%s</Client>
 	</Dial>
-	<Say>Sorry, the agent is not available. Please try again later.</Say>
-</Response>`, agentID)
+</Response>`, actionURL, agentID)
+
+	log.Printf("📞 Dialing agent %s with 15s timeout", agentID)
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(twiml))
+}
+
+// putCallerInQueue generates TwiML to put caller in hold queue
+func (s *Server) putCallerInQueue(w http.ResponseWriter, r *http.Request, callSID string, companyID int32, from, to string) {
+	webhookBase := os.Getenv("WEBHOOK_BASE_URL")
+	if webhookBase == "" {
+		webhookBase = "http://localhost:8000"
+	}
+
+	// Create or update queue entry as waiting
+	_, err := s.queries.CreateQueueEntry(r.Context(), db.CreateQueueEntryParams{
+		CallSid:    callSID,
+		CompanyID:  companyID,
+		FromNumber: from,
+		ToNumber:   to,
+	})
+	if err != nil {
+		// Entry might already exist, update status to waiting
+		s.queries.UpdateQueueStatus(r.Context(), db.UpdateQueueStatusParams{
+			Status:  sql.NullString{String: "waiting", Valid: true},
+			CallSid: callSID,
+		})
+	}
+
+	waitURL := fmt.Sprintf("%s/twilio/queue-wait", webhookBase)
+
+	// Enqueue the caller with wait URL for hold music
+	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+	<Say>All agents are currently busy. Please hold and we will connect you shortly.</Say>
+	<Enqueue waitUrl="%s" waitUrlMethod="POST">company_%d</Enqueue>
+</Response>`, waitURL, companyID)
+
+	log.Printf("📋 Putting caller in queue for company %d", companyID)
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(twiml))
+}
+
+// handleDialCallback handles the result of a dial attempt and tries the next agent if needed
+func (s *Server) handleDialCallback(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		log.Printf("Error parsing form: %v", err)
+	}
+
+	callSID := r.FormValue("CallSid")
+	dialCallStatus := r.FormValue("DialCallStatus") // completed, no-answer, busy, failed, canceled
+
+	log.Printf("📞 Dial callback: CallSID=%s, DialCallStatus=%s", callSID, dialCallStatus)
+
+	// Get queue entry for this call
+	queueEntry, err := s.queries.GetQueueEntry(r.Context(), callSID)
+	if err != nil {
+		log.Printf("Queue entry not found for %s: %v", callSID, err)
+		s.returnHangup(w)
+		return
+	}
+
+	// If call was answered successfully, mark as connected and we're done
+	if dialCallStatus == "completed" || dialCallStatus == "answered" {
+		log.Printf("✅ Call %s was answered", callSID)
+		s.queries.MarkQueueEntryConnected(r.Context(), callSID)
+		// Call completed normally - return empty response (Twilio will handle)
+		s.returnHangup(w)
+		return
+	}
+
+	// Call was not answered - try next agent
+	log.Printf("📞 Call %s not answered (status: %s), trying next agent", callSID, dialCallStatus)
+
+	// Parse agents already tried
+	var agentsTried []int32
+	if queueEntry.AgentsTried.Valid && queueEntry.AgentsTried.String != "" && queueEntry.AgentsTried.String != "[]" {
+		if err := json.Unmarshal([]byte(queueEntry.AgentsTried.String), &agentsTried); err != nil {
+			log.Printf("Error parsing agents tried: %v", err)
+		}
+	}
+
+	// Get available agents again (status may have changed)
+	agents, err := s.queries.GetAvailableAgentsByCompanyLongestIdle(r.Context(), queueEntry.CompanyID)
+	if err != nil {
+		log.Printf("Error getting agents: %v", err)
+		s.putCallerInQueueFromCallback(w, r, callSID, queueEntry)
+		return
+	}
+
+	// Filter out agents we've already tried
+	var availableAgents []db.GetAvailableAgentsByCompanyLongestIdleRow
+	for _, agent := range agents {
+		tried := false
+		for _, triedID := range agentsTried {
+			if agent.ID == triedID {
+				tried = true
+				break
+			}
+		}
+		if !tried {
+			availableAgents = append(availableAgents, agent)
+		}
+	}
+
+	if len(availableAgents) == 0 {
+		// All agents tried or none available - put caller in queue
+		log.Printf("📋 All agents tried, putting caller in queue")
+		s.putCallerInQueueFromCallback(w, r, callSID, queueEntry)
+		return
+	}
+
+	// Update queue entry with agent we're about to try
+	nextAgent := availableAgents[0]
+	agentsTried = append(agentsTried, nextAgent.ID)
+	agentsTriedJSON, _ := json.Marshal(agentsTried)
+
+	currentIndex := int32(0)
+	if queueEntry.CurrentAgentIndex.Valid {
+		currentIndex = queueEntry.CurrentAgentIndex.Int32
+	}
+
+	s.queries.UpdateQueueEntry(r.Context(), db.UpdateQueueEntryParams{
+		Status:            sql.NullString{String: "routing", Valid: true},
+		CurrentAgentIndex: sql.NullInt32{Int32: currentIndex + 1, Valid: true},
+		AgentsTried:       sql.NullString{String: string(agentsTriedJSON), Valid: true},
+		CallSid:           callSID,
+	})
+
+	// Dial next agent
+	log.Printf("📞 Trying next agent: %s", nextAgent.AgentID)
+	s.dialAgent(w, nextAgent.AgentID, callSID)
+}
+
+// putCallerInQueueFromCallback handles putting caller in queue from dial callback
+func (s *Server) putCallerInQueueFromCallback(w http.ResponseWriter, r *http.Request, callSID string, queueEntry db.CallQueue) {
+	webhookBase := os.Getenv("WEBHOOK_BASE_URL")
+	if webhookBase == "" {
+		webhookBase = "http://localhost:8000"
+	}
+
+	// Update queue status to waiting
+	s.queries.UpdateQueueStatus(r.Context(), db.UpdateQueueStatusParams{
+		Status:  sql.NullString{String: "waiting", Valid: true},
+		CallSid: callSID,
+	})
+
+	waitURL := fmt.Sprintf("%s/twilio/queue-wait", webhookBase)
+
+	// Enqueue the caller
+	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+	<Say>All agents are currently busy. Please hold and we will connect you shortly.</Say>
+	<Enqueue waitUrl="%s" waitUrlMethod="POST">company_%d</Enqueue>
+</Response>`, waitURL, queueEntry.CompanyID)
 
 	w.Header().Set("Content-Type", "application/xml")
 	w.Write([]byte(twiml))
+}
+
+// handleQueueWait returns TwiML for hold music while caller waits in queue
+func (s *Server) handleQueueWait(w http.ResponseWriter, r *http.Request) {
+	// Return hold music with periodic announcements
+	// Loop 0 means infinite loop - Twilio will keep playing until call is dequeued
+	twiml := `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+	<Say>Your call is important to us. Please continue to hold.</Say>
+	<Play loop="0">https://api.twilio.com/cowbell.mp3</Play>
+</Response>`
+
+	log.Printf("🎵 Serving queue wait music")
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(twiml))
+}
+
+// handleDequeueDial - endpoint for dequeued calls to dial an agent
+func (s *Server) handleDequeueDial(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agent")
+	if agentID == "" {
+		if err := r.ParseForm(); err == nil {
+			agentID = r.FormValue("agent")
+		}
+	}
+
+	if agentID == "" {
+		log.Printf("No agent ID provided for dequeue dial")
+		s.returnHangup(w)
+		return
+	}
+
+	webhookBase := os.Getenv("WEBHOOK_BASE_URL")
+	if webhookBase == "" {
+		webhookBase = "http://localhost:8000"
+	}
+
+	actionURL := fmt.Sprintf("%s/twilio/dial-callback", webhookBase)
+
+	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+	<Say>Connecting you now.</Say>
+	<Dial timeout="15" action="%s">
+		<Client>%s</Client>
+	</Dial>
+	<Say>The agent is not available. Please try again later.</Say>
+	<Hangup/>
+</Response>`, actionURL, agentID)
+
+	log.Printf("📞 Dequeue dial to agent: %s", agentID)
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(twiml))
+}
+
+// returnHangup returns TwiML to end the call
+func (s *Server) returnHangup(w http.ResponseWriter) {
+	twiml := `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+	<Hangup/>
+</Response>`
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(twiml))
+}
+
+// checkQueueForAgent checks if there are waiting calls and initiates routing to the agent
+func (s *Server) checkQueueForAgent(companyID int32, agentID string) {
+	ctx := context.Background()
+
+	// Get oldest waiting call for this company
+	queueEntry, err := s.queries.GetOldestWaitingCall(ctx, companyID)
+	if err != nil {
+		// No waiting calls - this is normal
+		log.Printf("📋 No waiting calls for company %d", companyID)
+		return
+	}
+
+	log.Printf("📞 Found waiting call %s, dequeuing to agent %s", queueEntry.CallSid, agentID)
+
+	// Use Twilio REST API to redirect the queued call
+	s.dequeueCallToAgent(queueEntry.CallSid, agentID, companyID)
+}
+
+// dequeueCallToAgent uses Twilio REST API to redirect a queued call to an agent
+func (s *Server) dequeueCallToAgent(callSid, agentID string, companyID int32) {
+	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
+	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
+	webhookBase := os.Getenv("WEBHOOK_BASE_URL")
+
+	if accountSid == "" || authToken == "" {
+		log.Printf("❌ Missing Twilio credentials for dequeue operation")
+		return
+	}
+
+	if webhookBase == "" {
+		webhookBase = "http://localhost:8000"
+	}
+
+	// Create Twilio client
+	client := twilio.NewRestClientWithParams(twilio.ClientParams{
+		Username: accountSid,
+		Password: authToken,
+	})
+
+	// URL to TwiML that will dial the agent
+	twimlURL := fmt.Sprintf("%s/twilio/dequeue-dial?agent=%s", webhookBase, agentID)
+
+	// Update the call to redirect to our TwiML
+	params := &twilioApi.UpdateCallParams{}
+	params.SetUrl(twimlURL)
+	params.SetMethod("POST")
+
+	_, err := client.Api.UpdateCall(callSid, params)
+	if err != nil {
+		log.Printf("❌ Error redirecting queued call %s: %v", callSid, err)
+		return
+	}
+
+	log.Printf("✅ Successfully redirected call %s to agent %s", callSid, agentID)
+
+	// Update queue entry status to routing
+	ctx := context.Background()
+	s.queries.MarkQueueEntryRouting(ctx, callSid)
 }
 
 // Call tracking handlers
@@ -1474,6 +1802,19 @@ func (s *Server) updateCallRecord(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to update call record: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to update call record")
 		return
+	}
+
+	// Update agent's last_call_ended_at for "longest idle first" routing
+	if req.CallStatus == "completed" || req.CallStatus == "no-answer" || req.CallStatus == "busy" || req.CallStatus == "failed" {
+		// Update the agent's last call ended time
+		s.queries.UpdateUserLastCallEnded(r.Context(), db.UpdateUserLastCallEndedParams{
+			LastCallEndedAt: sql.NullTime{Time: time.Now(), Valid: true},
+			ID:              session.UserID,
+		})
+		log.Printf("📞 Updated last_call_ended_at for agent %d", session.UserID)
+
+		// Clean up queue entry if it exists
+		s.queries.DeleteQueueEntry(r.Context(), callSID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

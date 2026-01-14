@@ -207,3 +207,69 @@ WHERE assigned_to = ?
     AND due_date IS NOT NULL
     AND due_date >= NOW()
     AND due_date <= DATE_ADD(NOW(), INTERVAL 7 DAY);
+
+-- -----------------------
+-- Sequential Call Routing Queries
+-- -----------------------
+
+-- name: GetAvailableAgentsByCompanyLongestIdle :many
+SELECT u.id, u.agent_id, u.firstname, u.lastname, u.company_id, u.last_call_ended_at
+FROM users u
+INNER JOIN (
+    SELECT user_id, MAX(created_at) as latest_status_time
+    FROM agent_status
+    GROUP BY user_id
+) latest_status ON u.id = latest_status.user_id
+INNER JOIN agent_status ast ON u.id = ast.user_id
+    AND ast.created_at = latest_status.latest_status_time
+WHERE u.company_id = ?
+    AND ast.status = 'available'
+ORDER BY COALESCE(u.last_call_ended_at, '1970-01-01 00:00:00') ASC, u.id ASC;
+
+-- name: UpdateUserLastCallEnded :exec
+UPDATE users SET last_call_ended_at = ? WHERE id = ?;
+
+-- name: GetAllUsersByCompany :many
+SELECT * FROM users WHERE company_id = ? ORDER BY id ASC;
+
+-- -----------------------
+-- Call Queue Queries
+-- -----------------------
+
+-- name: CreateQueueEntry :execresult
+INSERT INTO call_queue (call_sid, company_id, from_number, to_number, status, agents_tried)
+VALUES (?, ?, ?, ?, 'waiting', '[]');
+
+-- name: GetQueueEntry :one
+SELECT * FROM call_queue WHERE call_sid = ?;
+
+-- name: UpdateQueueEntry :exec
+UPDATE call_queue
+SET status = ?, current_agent_index = ?, agents_tried = ?, updated_at = NOW()
+WHERE call_sid = ?;
+
+-- name: UpdateQueueStatus :exec
+UPDATE call_queue SET status = ?, updated_at = NOW() WHERE call_sid = ?;
+
+-- name: DeleteQueueEntry :exec
+DELETE FROM call_queue WHERE call_sid = ?;
+
+-- name: GetOldestWaitingCall :one
+SELECT * FROM call_queue
+WHERE company_id = ? AND status = 'waiting'
+ORDER BY created_at ASC
+LIMIT 1;
+
+-- name: GetWaitingCallsByCompany :many
+SELECT * FROM call_queue
+WHERE company_id = ? AND status = 'waiting'
+ORDER BY created_at ASC;
+
+-- name: MarkQueueEntryRouting :exec
+UPDATE call_queue SET status = 'routing', updated_at = NOW() WHERE call_sid = ?;
+
+-- name: MarkQueueEntryConnected :exec
+UPDATE call_queue SET status = 'connected', updated_at = NOW() WHERE call_sid = ?;
+
+-- name: MarkQueueEntryAbandoned :exec
+UPDATE call_queue SET status = 'abandoned', updated_at = NOW() WHERE call_sid = ?;
