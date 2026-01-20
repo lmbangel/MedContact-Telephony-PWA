@@ -583,6 +583,12 @@ async function handleInitTwilio() {
         console.log('Call disconnected');
         callStore.endCall();
       },
+      onMissedCall: (callInfo) => {
+        console.log('Missed call from:', callInfo.from);
+        // The call has already been recorded to the database by TwilioService
+        // Just ensure the UI is reset
+        callStore.endCall();
+      },
       onError: (error) => {
         console.error('Twilio error:', error);
         alert('Call error: ' + error.message);

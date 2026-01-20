@@ -129,7 +129,7 @@ export class CallStore {
   }
 
   /**
-   * End the active call or cancel outgoing call
+   * End the active call, cancel outgoing call, or handle dropped incoming call
    */
   endCall() {
     if (this.state.state === 'active') {
@@ -146,6 +146,18 @@ export class CallStore {
       }, 2000);
     } else if (this.state.state === 'outgoing') {
       // Cancel outgoing call
+      this.state = {
+        ...this.state,
+        state: 'ended'
+      };
+      this.notify();
+
+      // Reset to idle after 1 second
+      setTimeout(() => {
+        this.resetCall();
+      }, 1000);
+    } else if (this.state.state === 'incoming') {
+      // Handle caller dropping before agent answers (missed call)
       this.state = {
         ...this.state,
         state: 'ended'

@@ -14,9 +14,12 @@ export class TwilioService {
       onIncoming: null,
       onConnected: null,
       onDisconnected: null,
-      onError: null
+      onError: null,
+      onMissedCall: null
     };
     this.callTrackingService = callTrackingService;
+    // Track incoming call details for missed call recording
+    this.pendingIncomingCall = null;
   }
 
   /**
@@ -64,6 +67,14 @@ export class TwilioService {
       console.log('Incoming call from:', connection.parameters.From);
       this.currentConnection = connection;
 
+      // Track incoming call details for potential missed call recording
+      this.pendingIncomingCall = {
+        callSid: connection.parameters.CallSid,
+        from: connection.parameters.From,
+        to: connection.parameters.To || connection.parameters.Called,
+        startTime: Date.now()
+      };
+
       // Set up connection handlers
       this.setupConnectionHandlers(connection);
 
@@ -103,6 +114,9 @@ export class TwilioService {
     connection.on('accept', async () => {
       console.log('Call accepted');
 
+      // Clear pending incoming call since it was answered
+      this.pendingIncomingCall = null;
+
       // Track call start
       const callSid = connection.parameters.CallSid;
       const fromNumber = connection.parameters.From || connection.customParameters?.From;
@@ -128,6 +142,7 @@ export class TwilioService {
       // Update call with final status and duration
       await this.callTrackingService.endActiveCall('completed');
 
+      this.pendingIncomingCall = null;
       this.currentConnection = null;
       if (this.listeners.onDisconnected) {
         this.listeners.onDisconnected();
@@ -137,9 +152,36 @@ export class TwilioService {
     connection.on('reject', async () => {
       console.log('Call rejected');
 
-      // Update call as rejected/no-answer
-      await this.callTrackingService.endActiveCall('no-answer');
+      // Record as missed call if we have pending incoming call info
+      if (this.pendingIncomingCall) {
+        await this.recordMissedCall(this.pendingIncomingCall, 'no-answer');
+      } else {
+        // Update call as rejected/no-answer
+        await this.callTrackingService.endActiveCall('no-answer');
+      }
 
+      this.pendingIncomingCall = null;
+      this.currentConnection = null;
+      if (this.listeners.onDisconnected) {
+        this.listeners.onDisconnected();
+      }
+    });
+
+    // Handle caller hanging up before answer (missed call)
+    connection.on('cancel', async () => {
+      console.log('Call cancelled - caller hung up before answer');
+
+      // Record as missed call
+      if (this.pendingIncomingCall) {
+        await this.recordMissedCall(this.pendingIncomingCall, 'no-answer');
+
+        // Notify listener about missed call
+        if (this.listeners.onMissedCall) {
+          this.listeners.onMissedCall(this.pendingIncomingCall);
+        }
+      }
+
+      this.pendingIncomingCall = null;
       this.currentConnection = null;
       if (this.listeners.onDisconnected) {
         this.listeners.onDisconnected();
@@ -149,13 +191,43 @@ export class TwilioService {
     connection.on('error', async (error) => {
       console.error('Connection error:', error);
 
-      // Update call as failed
-      await this.callTrackingService.endActiveCall('failed');
+      // Record as failed call if we have pending incoming call info
+      if (this.pendingIncomingCall) {
+        await this.recordMissedCall(this.pendingIncomingCall, 'failed');
+      } else {
+        // Update call as failed
+        await this.callTrackingService.endActiveCall('failed');
+      }
 
+      this.pendingIncomingCall = null;
       if (this.listeners.onError) {
         this.listeners.onError(error);
       }
     });
+  }
+
+  /**
+   * Record a missed call to the database
+   * @param {Object} callInfo - The pending incoming call info
+   * @param {string} status - The call status (no-answer, failed)
+   */
+  async recordMissedCall(callInfo, status = 'no-answer') {
+    try {
+      console.log('Recording missed call:', callInfo.callSid, 'Status:', status);
+
+      // Record the call with missed status
+      await this.callTrackingService.recordCall({
+        call_sid: callInfo.callSid,
+        from_number: callInfo.from,
+        to_number: callInfo.to,
+        call_status: status,
+        duration: 0
+      });
+
+      console.log('Missed call recorded successfully');
+    } catch (error) {
+      console.error('Failed to record missed call:', error);
+    }
   }
 
   /**
