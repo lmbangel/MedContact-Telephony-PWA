@@ -519,6 +519,113 @@ func (q *Queries) GetCallBySid(ctx context.Context, callSid string) (Transcripti
 	return i, err
 }
 
+const getCallsByCustomer = `-- name: GetCallsByCustomer :many
+SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
+WHERE customer_id = ?
+ORDER BY created_at DESC
+LIMIT 20
+`
+
+func (q *Queries) GetCallsByCustomer(ctx context.Context, customerID sql.NullInt32) ([]Transcription, error) {
+	rows, err := q.db.QueryContext(ctx, getCallsByCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transcription{}
+	for rows.Next() {
+		var i Transcription
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerID,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.CallSid,
+			&i.RecordingSid,
+			&i.RecordingUrl,
+			&i.RecordingDuration,
+			&i.RecordingStatus,
+			&i.RecordingChannels,
+			&i.RecordingStartTime,
+			&i.Transcript,
+			&i.Summary,
+			&i.FromNumber,
+			&i.ToNumber,
+			&i.CallStatus,
+			&i.Duration,
+			&i.CallReason,
+			&i.TranscriptionText,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCallsByPhone = `-- name: GetCallsByPhone :many
+SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
+WHERE from_number = ? OR to_number = ?
+ORDER BY created_at DESC
+LIMIT 20
+`
+
+type GetCallsByPhoneParams struct {
+	FromNumber sql.NullString `json:"from_number"`
+	ToNumber   sql.NullString `json:"to_number"`
+}
+
+func (q *Queries) GetCallsByPhone(ctx context.Context, arg GetCallsByPhoneParams) ([]Transcription, error) {
+	rows, err := q.db.QueryContext(ctx, getCallsByPhone, arg.FromNumber, arg.ToNumber)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transcription{}
+	for rows.Next() {
+		var i Transcription
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerID,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.CallSid,
+			&i.RecordingSid,
+			&i.RecordingUrl,
+			&i.RecordingDuration,
+			&i.RecordingStatus,
+			&i.RecordingChannels,
+			&i.RecordingStartTime,
+			&i.Transcript,
+			&i.Summary,
+			&i.FromNumber,
+			&i.ToNumber,
+			&i.CallStatus,
+			&i.Duration,
+			&i.CallReason,
+			&i.TranscriptionText,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCompany = `-- name: GetCompany :one
 SELECT id, name, created_at FROM companies WHERE id = ?
 `
@@ -925,6 +1032,46 @@ func (q *Queries) GetTaskStatsByType(ctx context.Context, arg GetTaskStatsByType
 	var task_count int64
 	err := row.Scan(&task_count)
 	return task_count, err
+}
+
+const getTasksByCustomer = `-- name: GetTasksByCustomer :many
+SELECT id, assigned_to, customer_id, call_id, title, description, type, status, due_date, created_at FROM tasks
+WHERE customer_id = ?
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetTasksByCustomer(ctx context.Context, customerID sql.NullInt32) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getTasksByCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Task{}
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssignedTo,
+			&i.CustomerID,
+			&i.CallID,
+			&i.Title,
+			&i.Description,
+			&i.Type,
+			&i.Status,
+			&i.DueDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTasksByUser = `-- name: GetTasksByUser :many

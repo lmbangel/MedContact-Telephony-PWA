@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"strconv"
 
 	// "net/smtp" // Uncomment when using SMTP email sending
 	"omnicall/db"
@@ -251,6 +252,7 @@ func main() {
 	r.Post("/api/calls", server.createCallRecord)
 	r.Put("/api/calls/{call_sid}", server.updateCallRecord)
 	r.Get("/api/calls/stats", server.getCallStats)
+	r.Get("/api/calls/customer/{customer_id}", server.getCallsByCustomer)
 
 	// Task routes
 	r.Post("/api/tasks", server.createTask)
@@ -1876,6 +1878,70 @@ func (s *Server) getCallStats(w http.ResponseWriter, r *http.Request) {
 		AnsweredCalls: stats.AnsweredCalls,
 		MissedCalls:   stats.MissedCalls,
 		AvgDuration:   avgDuration,
+	})
+}
+
+func (s *Server) getCallsByCustomer(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := s.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		s.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Get customer ID from URL parameter
+	customerIDStr := chi.URLParam(r, "customer_id")
+	if customerIDStr == "" {
+		respondError(w, http.StatusBadRequest, "customer_id is required")
+		return
+	}
+
+	customerID, err := strconv.ParseInt(customerIDStr, 10, 32)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid customer_id")
+		return
+	}
+
+	// Get calls for this customer
+	calls, err := s.queries.GetCallsByCustomer(r.Context(), sql.NullInt32{
+		Int32: int32(customerID),
+		Valid: true,
+	})
+	if err != nil {
+		log.Printf("Failed to get calls for customer %d: %v", customerID, err)
+		respondError(w, http.StatusInternalServerError, "Failed to get call history")
+		return
+	}
+
+	// Transform calls to response format
+	callsList := make([]map[string]interface{}, 0, len(calls))
+	for _, call := range calls {
+		callsList = append(callsList, map[string]interface{}{
+			"id":          call.ID,
+			"call_sid":    call.CallSid,
+			"from_number": call.FromNumber.String,
+			"to_number":   call.ToNumber.String,
+			"call_status": call.CallStatus.String,
+			"duration":    call.Duration.Int32,
+			"created_at":  call.CreatedAt.Time,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"calls":   callsList,
 	})
 }
 

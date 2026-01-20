@@ -32,6 +32,14 @@ export class CallStore {
    */
   notify() {
     this.listeners.forEach(listener => listener({ ...this.state }));
+
+    // Post message to parent window (for dashboard integration)
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        type: 'CALL_STATE_CHANGE',
+        payload: { ...this.state }
+      }, '*');
+    }
   }
 
   /**

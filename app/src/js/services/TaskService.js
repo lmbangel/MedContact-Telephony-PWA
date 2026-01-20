@@ -194,6 +194,57 @@ class TaskService {
       };
     }
   }
+
+  /**
+   * Get tasks for a specific customer
+   * @param {number} customerId - Customer ID
+   * @returns {Promise<Object>} Tasks or error
+   */
+  async getTasksByCustomer(customerId) {
+    try {
+      const url = `${API_BASE_URL}/api/tasks?customer_id=${customerId}`;
+      console.log('📋 Fetching tasks for customer:', customerId);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch customer tasks:', data.detail || response.statusText);
+        return {
+          success: false,
+          error: data.detail || 'Failed to fetch customer tasks',
+          tasks: [],
+        };
+      }
+
+      if (data.success && data.tasks) {
+        console.log('✅ Successfully loaded', data.tasks.length, 'tasks for customer');
+        return {
+          success: true,
+          tasks: data.tasks,
+        };
+      }
+
+      return {
+        success: true,
+        tasks: [],
+      };
+    } catch (error) {
+      console.error('❌ Network error fetching customer tasks:', error);
+      return {
+        success: false,
+        error: 'Network error. Please try again.',
+        tasks: [],
+      };
+    }
+  }
 }
 
 export const taskService = new TaskService();

@@ -44,6 +44,42 @@ class CustomerService {
   }
 
   /**
+   * Get customer by ID
+   * @param {number} customerId - The customer ID to lookup
+   * @returns {Promise<Object|null>} Customer information or null if not found
+   */
+  async getCustomerById(customerId) {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/customers/${customerId}`,
+        {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error('Failed to fetch customer by ID:', response.statusText);
+        return null;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.customer) {
+        return data.customer;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching customer by ID:', error);
+      return null;
+    }
+  }
+
+  /**
    * Format customer display name
    * @param {Object} customer - Customer object
    * @returns {string} Formatted display name

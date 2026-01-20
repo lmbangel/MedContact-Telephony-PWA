@@ -149,6 +149,74 @@ export class CallTrackingService {
     if (!this.callStartTime) return 0;
     return Math.floor((Date.now() - this.callStartTime) / 1000);
   }
+
+  /**
+   * Get call history for a specific customer
+   * @param {number} customerId - Customer ID
+   * @returns {Promise<Object>} Call history or null
+   */
+  async getCallsByCustomer(customerId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/calls/customer/${customerId}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      // Handle 404 or 405 gracefully - endpoint may not exist yet
+      if (response.status === 404 || response.status === 405) {
+        console.log('Call history by customer endpoint not available');
+        return { success: true, calls: [] };
+      }
+
+      if (!response.ok) {
+        return { success: false, calls: [] };
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        calls: data.calls || [],
+      };
+    } catch (error) {
+      // Silently handle - endpoint may not be implemented
+      console.log('Call history lookup not available:', error.message);
+      return { success: true, calls: [] };
+    }
+  }
+
+  /**
+   * Get call history by phone number
+   * @param {string} phoneNumber - Phone number to lookup
+   * @returns {Promise<Object>} Call history or null
+   */
+  async getCallsByPhone(phoneNumber) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/calls/phone/${encodeURIComponent(phoneNumber)}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      // Handle 404 or 405 gracefully - endpoint may not exist yet
+      if (response.status === 404 || response.status === 405) {
+        console.log('Call history by phone endpoint not available');
+        return { success: true, calls: [] };
+      }
+
+      if (!response.ok) {
+        return { success: false, calls: [] };
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        calls: data.calls || [],
+      };
+    } catch (error) {
+      // Silently handle - endpoint may not be implemented
+      console.log('Call history lookup not available:', error.message);
+      return { success: true, calls: [] };
+    }
+  }
 }
 
 // Export singleton instance

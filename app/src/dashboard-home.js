@@ -1,7 +1,14 @@
 import { authService } from './js/services/AuthService.js';
 import { customerService } from './js/services/CustomerService.js';
 import { taskService } from './js/services/TaskService.js';
+import { callTrackingService } from './js/services/CallTrackingService.js';
 import { API_URL } from './config.js';
+
+// Customer Info Panel State
+let currentCustomerId = null;
+let customerPanelOpen = false;
+let lastCallState = 'idle';
+let customerDataLoaded = false;
 
 // Fetch company by ID
 async function fetchCompany(companyId) {
@@ -269,6 +276,10 @@ async function handleTaskFilterChange() {
 
 // Wait for DOM to load before attaching events
 document.addEventListener('DOMContentLoaded', () => {
+  // Setup call state listener for customer info panel
+  setupCallStateListener();
+  setupCustomerPanelHandlers();
+
   const logoutBtn = document.getElementById('logoutBtn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', handleLogout);
@@ -795,6 +806,312 @@ function showFollowUpFormMessage(type, message) {
 function hideFollowUpFormMessage() {
   const followUpFormMessage = document.getElementById('followUpFormMessage');
   followUpFormMessage.classList.add('hidden');
+}
+
+// ============================================
+// Customer Info Panel Functions
+// ============================================
+
+/**
+ * Show the customer info panel
+ */
+function showCustomerPanel() {
+  const panel = document.getElementById('customer-info-panel');
+  if (panel) {
+    panel.classList.remove('hidden');
+    // Small delay to allow the display change before transform
+    setTimeout(() => {
+      panel.classList.remove('translate-x-full');
+      panel.classList.add('translate-x-0');
+    }, 10);
+    customerPanelOpen = true;
+  }
+}
+
+/**
+ * Hide the customer info panel
+ */
+function hideCustomerPanel() {
+  const panel = document.getElementById('customer-info-panel');
+  if (panel) {
+    panel.classList.remove('translate-x-0');
+    panel.classList.add('translate-x-full');
+    // Hide after animation completes
+    setTimeout(() => {
+      panel.classList.add('hidden');
+    }, 300);
+    customerPanelOpen = false;
+  }
+}
+
+/**
+ * Show loading state in customer panel
+ */
+function showCustomerPanelLoading() {
+  document.getElementById('customerInfoLoading')?.classList.remove('hidden');
+  document.getElementById('noCustomerFound')?.classList.add('hidden');
+  document.getElementById('customerDetails')?.classList.add('hidden');
+  document.getElementById('customerQuickActions')?.classList.add('hidden');
+}
+
+/**
+ * Show unknown caller state
+ */
+function showUnknownCaller(phoneNumber) {
+  document.getElementById('customerInfoLoading')?.classList.add('hidden');
+  document.getElementById('noCustomerFound')?.classList.remove('hidden');
+  document.getElementById('customerDetails')?.classList.add('hidden');
+  document.getElementById('customerQuickActions')?.classList.add('hidden');
+
+  const unknownNumber = document.getElementById('unknownCallerNumber');
+  if (unknownNumber) {
+    unknownNumber.textContent = phoneNumber || 'Unknown Number';
+  }
+}
+
+/**
+ * Show customer details
+ */
+function showCustomerDetails(customer) {
+  document.getElementById('customerInfoLoading')?.classList.add('hidden');
+  document.getElementById('noCustomerFound')?.classList.add('hidden');
+  document.getElementById('customerDetails')?.classList.remove('hidden');
+  document.getElementById('customerQuickActions')?.classList.remove('hidden');
+
+  // Update customer info
+  const fullName = `${customer.first_name} ${customer.last_name}`;
+  const initials = `${customer.first_name?.charAt(0) || ''}${customer.last_name?.charAt(0) || ''}`.toUpperCase();
+
+  document.getElementById('customerInitials').textContent = initials;
+  document.getElementById('customerFullName').textContent = fullName;
+  document.getElementById('customerPhone').textContent = customer.phone?.String || customer.phone || '-';
+  document.getElementById('customerEmail').textContent = customer.email?.String || customer.email || '-';
+
+  console.log('Displaying customer info:', customer);
+  // Medical Aid info
+  document.getElementById('customerMedicalProvider').textContent = customer.medical_aid_provider?.String || customer.medical_aid_provider || '-';
+  document.getElementById('customerMedicalPlan').textContent = customer.medical_plan?.String || customer.medical_plan || '-';
+  document.getElementById('customerMedicalNumber').textContent = customer.medical_aid_number?.String || customer.medical_aid_number || '-';
+
+  // Store current customer ID for quick actions
+  currentCustomerId = customer.id;
+}
+
+/**
+ * Load and display customer tasks
+ */
+async function loadCustomerTasks(customerId) {
+  const tasksList = document.getElementById('customerTasksList');
+  const taskCount = document.getElementById('customerTaskCount');
+
+  if (!tasksList) return;
+
+  try {
+    const result = await taskService.getTasksByCustomer(customerId);
+
+    if (result.success && result.tasks && result.tasks.length > 0) {
+      taskCount.textContent = result.tasks.length;
+      tasksList.innerHTML = result.tasks.slice(0, 5).map(task => {
+        const statusColors = {
+          'pending': 'bg-yellow-100 text-yellow-800',
+          'in_progress': 'bg-blue-100 text-blue-800',
+          'completed': 'bg-green-100 text-green-800'
+        };
+        let taskStatus = task.status?.String || task.status;
+        const statusColor = statusColors[taskStatus] || 'bg-gray-100 text-gray-800';
+
+        return `
+          <div class="flex items-center justify-between p-2 bg-white rounded border">
+            <span class="truncate flex-1">${task.title}</span>
+            <span class="text-xs px-2 py-0.5 rounded ${statusColor} ml-2">${taskStatus}</span>
+          </div>
+        `;
+      }).join('');
+    } else {
+      taskCount.textContent = '0';
+      tasksList.innerHTML = '<p class="text-gray-400 text-center py-2">No tasks</p>';
+    }
+  } catch (error) {
+    console.error('Error loading customer tasks:', error);
+    tasksList.innerHTML = '<p class="text-gray-400 text-center py-2">Failed to load tasks</p>';
+  }
+}
+
+/**
+ * Load and display customer call history
+ */
+async function loadCustomerCallHistory(customerId, phoneNumber) {
+  const callHistory = document.getElementById('customerCallHistory');
+  const callCount = document.getElementById('customerCallCount');
+
+  if (!callHistory) return;
+
+  try {
+    // Try to get calls by customer ID first, then by phone
+    let result = await callTrackingService.getCallsByCustomer(customerId);
+
+    if (!result.success || !result.calls || result.calls.length === 0) {
+      if (phoneNumber) {
+        result = await callTrackingService.getCallsByPhone(phoneNumber);
+      }
+    }
+
+    if (result.success && result.calls && result.calls.length > 0) {
+      callCount.textContent = result.calls.length;
+      callHistory.innerHTML = result.calls.slice(0, 5).map(call => {
+        const date = new Date(call.created_at);
+        const formattedDate = date.toLocaleDateString('en-ZA', {
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        const duration = call.duration ? `${Math.floor(call.duration / 60)}:${(call.duration % 60).toString().padStart(2, '0')}` : '-';
+        const statusIcon = call.call_status === 'completed'
+          ? '<svg class="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>'
+          : '<svg class="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>';
+
+        return `
+          <div class="flex items-center justify-between p-2 bg-white rounded border">
+            <div class="flex items-center gap-2">
+              ${statusIcon}
+              <span class="text-gray-600">${formattedDate}</span>
+            </div>
+            <span class="text-gray-500">${duration}</span>
+          </div>
+        `;
+      }).join('');
+    } else {
+      callCount.textContent = '0';
+      callHistory.innerHTML = '<p class="text-gray-400 text-center py-2">No previous calls</p>';
+    }
+  } catch (error) {
+    console.error('Error loading call history:', error);
+    callHistory.innerHTML = '<p class="text-gray-400 text-center py-2">Failed to load calls</p>';
+  }
+}
+
+/**
+ * Handle call state change from phone iframe
+ */
+async function handleCallStateChange(callState) {
+  const currentState = callState.state;
+
+  // Only process if the call state actually changed (ignore duration updates)
+  if (currentState === lastCallState) {
+    return;
+  }
+
+  console.log('📞 Dashboard call state changed:', lastCallState, '->', currentState);
+  lastCallState = currentState;
+
+  // Show panel for incoming, outgoing, or active calls
+  if (currentState === 'incoming' || currentState === 'outgoing' || currentState === 'active') {
+    // Only load customer data once when call starts
+    if (!customerDataLoaded) {
+      showCustomerPanel();
+      showCustomerPanelLoading();
+
+      // Get caller info
+      const caller = callState.caller;
+      const phoneNumber = caller?.number;
+
+      if (phoneNumber) {
+        // Try to lookup customer by phone number
+        const customer = await customerService.getCustomerByPhone(phoneNumber);
+
+        if (customer) {
+          showCustomerDetails(customer);
+          // Load related data
+          await Promise.all([
+            loadCustomerTasks(customer.id),
+            loadCustomerCallHistory(customer.id, phoneNumber)
+          ]);
+        } else {
+          showUnknownCaller(phoneNumber);
+        }
+      } else {
+        showUnknownCaller('Unknown');
+      }
+
+      customerDataLoaded = true;
+    } else {
+      // Just ensure panel is visible if data already loaded
+      showCustomerPanel();
+    }
+  } else if (currentState === 'idle') {
+    // Reset state when call fully ends and returns to idle
+    customerDataLoaded = false;
+    currentCustomerId = null;
+  } else if (currentState === 'ended') {
+    // Keep panel visible after call ends so agent can review/add notes
+    console.log('Call ended, keeping panel open for review');
+  }
+}
+
+/**
+ * Listen for messages from phone iframe
+ */
+function setupCallStateListener() {
+  window.addEventListener('message', (event) => {
+    // Validate message origin in production
+    if (event.data && event.data.type === 'CALL_STATE_CHANGE') {
+      handleCallStateChange(event.data.payload);
+    }
+  });
+  console.log('📞 Call state listener set up');
+}
+
+/**
+ * Setup customer panel event handlers
+ */
+function setupCustomerPanelHandlers() {
+  // Close panel button
+  const closeBtn = document.getElementById('closeCustomerPanelBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', hideCustomerPanel);
+  }
+
+  // Quick Create Task button
+  const quickTaskBtn = document.getElementById('quickCreateTaskBtn');
+  if (quickTaskBtn) {
+    quickTaskBtn.addEventListener('click', () => {
+      cosole.log('Quick Create Task clicked for customer ID:', currentCustomerId);
+      if (currentCustomerId) {
+        // Open task modal with customer pre-selected
+        const createTaskModal = document.getElementById('createTaskModal');
+        const taskCustomerSelect = document.getElementById('taskCustomerId');
+
+        if (createTaskModal && taskCustomerSelect) {
+          createTaskModal.classList.remove('hidden');
+          // Load customers and pre-select current customer
+          loadCustomersForTaskModal().then(() => {
+            taskCustomerSelect.value = currentCustomerId;
+          });
+        }
+      }
+    });
+  }
+
+  // Quick Follow-up button
+  const quickFollowUpBtn = document.getElementById('quickFollowUpBtn');
+  if (quickFollowUpBtn) {
+    quickFollowUpBtn.addEventListener('click', () => {
+      if (currentCustomerId) {
+        // Open follow-up modal with customer pre-selected
+        const followUpModal = document.getElementById('scheduleFollowUpModal');
+        const followUpCustomerSelect = document.getElementById('followUpCustomerId');
+
+        if (followUpModal && followUpCustomerSelect) {
+          followUpModal.classList.remove('hidden');
+          // Load customers and pre-select current customer
+          loadCustomersForFollowUpModal().then(() => {
+            followUpCustomerSelect.value = currentCustomerId;
+          });
+        }
+      }
+    });
+  }
 }
 
 init();

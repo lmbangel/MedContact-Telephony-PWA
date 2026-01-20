@@ -135,6 +135,18 @@ WHERE agent_id = ?
 ORDER BY created_at DESC
 LIMIT ? OFFSET ?;
 
+-- name: GetCallsByCustomer :many
+SELECT * FROM transcriptions
+WHERE customer_id = ?
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- name: GetCallsByPhone :many
+SELECT * FROM transcriptions
+WHERE from_number = ? OR to_number = ?
+ORDER BY created_at DESC
+LIMIT 20;
+
 -- -----------------------
 -- Task Queries
 -- -----------------------
@@ -155,6 +167,11 @@ ORDER BY created_at DESC;
 SELECT * FROM tasks
 WHERE assigned_to = ? AND status = 'pending'
 ORDER BY due_date ASC;
+
+-- name: GetTasksByCustomer :many
+SELECT * FROM tasks
+WHERE customer_id = ?
+ORDER BY created_at DESC;
 
 -- name: GetTaskStats :one
 SELECT
