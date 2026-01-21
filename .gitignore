@@ -28,7 +28,7 @@ dist
 
 # Old files
 *.old
-docker
+# docker
 app/node_modules
 .claude
 .docs
