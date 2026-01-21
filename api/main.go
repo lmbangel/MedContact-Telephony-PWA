@@ -209,14 +209,27 @@ func main() {
 	// Middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
+	// Build CORS allowed origins from environment variable (comma-separated) + defaults
+	allowedOrigins := []string{
+		"http://localhost:3000",
+		"http://127.0.0.1:3000",
+		"http://localhost:5173", // Vite default port
+		"http://127.0.0.1:5173",
+		"https://localhost:3000",
+	}
+	if envOrigins := os.Getenv("ALLOWED_ORIGINS"); envOrigins != "" {
+		for _, origin := range strings.Split(envOrigins, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				allowedOrigins = append(allowedOrigins, origin)
+			}
+		}
+		log.Printf("CORS allowed origins: %v", allowedOrigins)
+	}
+
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-			"http://localhost:5173", // Vite default port
-			"http://127.0.0.1:5173",
-			"https://localhost:3000",
-		},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -225,7 +238,7 @@ func main() {
 	}))
 
 	// Health check route
-	r.Get("/health", server.health)
+	r.Get("/api/health", server.health)
 
 	// Auth routes
 	r.Post("/api/auth/register", server.register)
@@ -282,7 +295,7 @@ func main() {
 	}
 
 	fmt.Printf("\n🚀 OmniCall API Server running on http://localhost:%s\n", port)
-	fmt.Println("📊 Health check: http://localhost:" + port + "/health")
+	fmt.Println("📊 Health check: http://localhost:" + port + "/api/health")
 	fmt.Println("🔐 Auth API: http://localhost:" + port + "/api/auth")
 	fmt.Println("🏢 Companies API: http://localhost:" + port + "/api/companies")
 	fmt.Println("📞 Twilio API: http://localhost:" + port + "/api/twilio\n")

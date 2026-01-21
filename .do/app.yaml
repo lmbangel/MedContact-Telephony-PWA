@@ -1,0 +1,88 @@
+name: medcontact-telephony
+
+# GitHub repository configuration
+# Uncomment and update with your repo details
+# github:
+#   repo: your-username/MedContact-Telephony-PWA
+#   branch: main
+#   deploy_on_push: true
+
+services:
+  # Go API Backend
+  - name: api
+    dockerfile_path: Dockerfile
+    source_dir: api
+    http_port: 8000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    routes:
+      - path: /api
+      - path: /twilio
+    envs:
+      # Database configuration
+      - key: DB_HOST
+        scope: RUN_TIME
+        type: SECRET
+      - key: DB_PORT
+        scope: RUN_TIME
+        value: "3306"
+      - key: DB_NAME
+        scope: RUN_TIME
+        type: SECRET
+      - key: DB_USER
+        scope: RUN_TIME
+        type: SECRET
+      - key: DB_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      # Security
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: ALLOWED_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      # Twilio configuration
+      - key: TWILIO_ACCOUNT_SID
+        scope: RUN_TIME
+        type: SECRET
+      - key: TWILIO_AUTH_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: TWILIO_API_KEY_SID
+        scope: RUN_TIME
+        type: SECRET
+      - key: TWILIO_API_KEY_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: TWILIO_TWIML_APP_SID
+        scope: RUN_TIME
+        type: SECRET
+      - key: TWILIO_PHONE_NUMBER
+        scope: RUN_TIME
+        type: SECRET
+      - key: WEBHOOK_BASE_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+
+static_sites:
+  # Vite Frontend (Telephony + Dashboard)
+  - name: frontend
+    build_command: npm install && npm run build
+    source_dir: app
+    output_dir: dist
+    index_document: index.html
+    error_document: index.html
+    routes:
+      - path: /app
+    envs:
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: ${APP_URL}
