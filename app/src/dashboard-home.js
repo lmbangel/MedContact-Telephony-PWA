@@ -180,7 +180,7 @@ async function init() {
   await authService.init();
 
   if (!authService.isAuthenticated()) {
-    window.location.href = '/app/dashboard-login.html';
+    window.location.href = './dashboard-login.html';
     return;
   }
 
@@ -237,7 +237,7 @@ async function init() {
 // Logout handler
 async function handleLogout() {
   await authService.logout();
-  window.location.href = '/app/dashboard-login.html';
+  window.location.href = './dashboard-login.html';
 }
 
 // Handle status change

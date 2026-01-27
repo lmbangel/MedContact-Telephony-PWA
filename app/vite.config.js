@@ -14,12 +14,15 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        // Phone app pages (UNCHANGED)
+        // Main entry - auth router
         main: resolve(__dirname, 'index.html'),
+
+        // Phone/Softphone app
+        phone: resolve(__dirname, 'phone.html'),
         login: resolve(__dirname, 'login.html'),
         register: resolve(__dirname, 'register.html'),
 
-        // Dashboard pages (NEW)
+        // Dashboard pages
         dashboardLogin: resolve(__dirname, 'dashboard-login.html'),
         dashboardRegister: resolve(__dirname, 'dashboard-register.html'),
         dashboardHome: resolve(__dirname, 'dashboard-home.html')

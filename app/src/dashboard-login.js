@@ -23,7 +23,7 @@ async function init() {
   // Check if already logged in
   await authService.init();
   if (authService.isAuthenticated()) {
-    window.location.href = '/app/dashboard-home.html';
+    window.location.href = './dashboard-home.html';
     return;
   }
 }
@@ -140,7 +140,7 @@ async function handleLogin(e) {
 
   if (result.success) {
     // Redirect to dashboard home
-    window.location.href = '/app/dashboard-home.html';
+    window.location.href = './dashboard-home.html';
   } else {
     showError(result.error || 'Invalid credentials');
     submitBtn.disabled = false;
