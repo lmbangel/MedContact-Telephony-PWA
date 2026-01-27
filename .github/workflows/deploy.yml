@@ -12,8 +12,7 @@ on:
 
 env:
   REGISTRY: registry.digitalocean.com/${{ secrets.REGISTRY_NAME }}
-  API_IMAGE: medcontact-api
-  APP_IMAGE: medcontact-app
+  IMAGE_NAME: medcontact-ap
 
 jobs:
   build-and-push:
@@ -36,20 +35,20 @@ jobs:
       - name: Build and push API image
         run: |
           docker build \
-            -t ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }} \
-            -t ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:api-${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:api-latest \
             ./api
-          docker push ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:api-${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:api-latest
 
-      - name: Build and push App image
+      - name: Build and push Frontend image
         run: |
           docker build \
-            -t ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:${{ github.sha }} \
-            -t ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:latest \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:frontend-${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:frontend-latest \
             ./app
-          docker push ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:frontend-${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:frontend-latest
 
   deploy:
     needs: build-and-push
