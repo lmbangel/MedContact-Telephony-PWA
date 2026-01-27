@@ -1,0 +1,57 @@
+name: Build and Deploy to Digital Ocean
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: registry.digitalocean.com/${{ secrets.REGISTRY_NAME }}
+  API_IMAGE: medcontact-api
+  APP_IMAGE: medcontact-app
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DO Container Registry
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Build and push API image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }} \
+                       -t ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest \
+                       ./api
+          docker push ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest
+
+      - name: Build and push App image
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:${{ github.sha }} \
+                       -t ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:latest \
+                       ./app
+          docker push ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.APP_IMAGE }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Deploy to App Platform
+        run: doctl apps create-deployment ${{ secrets.APP_ID }} --wait

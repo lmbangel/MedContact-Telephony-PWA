@@ -160,6 +160,11 @@ type CallStatsResponse struct {
 }
 
 func main() {
+	// Ensure logs are written immediately (no buffering)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	log.Println("=== API SERVER STARTING ===")
+
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
@@ -171,6 +176,15 @@ func main() {
 	dbName := os.Getenv("DB_NAME")
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
+
+	// Add diagnostic logging for environment variables
+	log.Printf("ENV CHECK - DB_HOST: %t, DB_PORT: %t, DB_NAME: %t, DB_USER: %t, DB_PASSWORD: %t",
+		dbHost != "", dbPort != "", dbName != "", dbUser != "", dbPassword != "")
+
+	// Log actual host value (safe to log, not a secret)
+	if dbHost != "" {
+		log.Printf("DB_HOST value: %s", dbHost)
+	}
 
 	// Validate required MySQL credentials
 	if dbHost == "" || dbPort == "" || dbName == "" || dbUser == "" || dbPassword == "" {
