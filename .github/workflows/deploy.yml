@@ -1,5 +1,10 @@
 name: Build and Deploy to Digital Ocean
 
+# Required GitHub Secrets:
+#   DIGITALOCEAN_ACCESS_TOKEN - DO API token with read/write access
+#   REGISTRY_NAME - Name of your DO Container Registry (e.g., "myregistry")
+#   APP_ID - Your DO App Platform app ID (find via: doctl apps list)
+
 on:
   push:
     branches: [main]
