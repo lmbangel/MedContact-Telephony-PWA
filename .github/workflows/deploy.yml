@@ -12,7 +12,7 @@ on:
 
 env:
   REGISTRY: registry.digitalocean.com/${{ secrets.REGISTRY_NAME }}
-  IMAGE_NAME: medcontact-ap
+  IMAGE_NAME: medcontact-api
 
 jobs:
   build-and-push:
