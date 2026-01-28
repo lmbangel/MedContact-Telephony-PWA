@@ -11,7 +11,7 @@ const API_URL = '/api';
 authService.init().then(() => {
   // If already authenticated, redirect to main app
   if (authService.isAuthenticated()) {
-    window.location.href = '/app/';
+    window.location.href = '/app/phone.html';
   }
 });
 
@@ -132,7 +132,7 @@ registerForm.addEventListener('submit', async (e) => {
 
     if (result.success) {
       // Redirect to main app
-      window.location.href = '/app/';
+      window.location.href = '/app/phone.html';
     } else {
       // Show error
       errorMessage.textContent = result.error || 'Failed to register';

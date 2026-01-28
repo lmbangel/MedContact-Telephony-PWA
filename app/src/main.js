@@ -477,7 +477,7 @@ function updateDialButtonState() {
  */
 function handleLogout() {
   authService.logout();
-  window.location.href = '/app/login.html';
+  window.location.href = './login.html';
 }
 
 /**

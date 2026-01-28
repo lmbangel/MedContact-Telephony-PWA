@@ -7,9 +7,9 @@ import { authService } from './js/services/AuthService.js';
 
 // Initialize auth service
 authService.init().then(() => {
-  // If already authenticated, redirect to main app
+  // If already authenticated, redirect to phone app
   if (authService.isAuthenticated()) {
-    window.location.href = '/app/';
+    window.location.href = '/app/phone.html';
   }
 });
 
@@ -35,8 +35,8 @@ loginForm.addEventListener('submit', async (e) => {
     const result = await authService.login(email, password);
 
     if (result.success) {
-      // Redirect to main app
-      window.location.href = '/app/';
+      // Redirect to phone app
+      window.location.href = '/app/phone.html';
     } else {
       // Show error
       errorMessage.textContent = result.error || 'Failed to login';
