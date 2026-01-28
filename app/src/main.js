@@ -3,6 +3,7 @@
  * Initializes the softphone UI and event handlers
  */
 
+import './styles/main.css';
 import { callStore } from './js/services/CallStore.js';
 import { ScreenController } from './js/ui/ScreenController.js';
 import { authService } from './js/services/AuthService.js';

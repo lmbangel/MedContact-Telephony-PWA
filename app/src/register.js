@@ -2,6 +2,7 @@
  * Register page logic
  */
 
+import './styles/main.css';
 import { authService } from './js/services/AuthService.js';
 
 const API_URL = '/api';

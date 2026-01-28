@@ -2,6 +2,7 @@
  * Login page logic
  */
 
+import './styles/main.css';
 import { authService } from './js/services/AuthService.js';
 
 // Initialize auth service
