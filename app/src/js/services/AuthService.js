@@ -14,6 +14,7 @@ class AuthService {
    */
   async init() {
     try {
+      console.log("🔄 Checking authentication status...", API_ENDPOINTS)
       const response = await fetch(API_ENDPOINTS.ME, {
         method: 'GET',
         credentials: 'include',
