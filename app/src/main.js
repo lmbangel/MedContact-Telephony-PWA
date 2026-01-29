@@ -403,7 +403,7 @@ async function handleDialCall() {
     try {
       // Check if Twilio is connected
       if (!twilioService.isReady()) {
-        alert('Please connect to Twilio first before making calls.');
+        console.error('Twilio not connected');
         return;
       }
 
@@ -444,7 +444,6 @@ async function handleDialCall() {
       updateDialButtonState();
     } catch (error) {
       console.error('Failed to initiate call:', error);
-      alert('Failed to make call: ' + error.message);
       // Reset call state on error
       callStore.resetCall();
     }
@@ -592,7 +591,21 @@ async function handleInitTwilio() {
       },
       onError: (error) => {
         console.error('Twilio error:', error);
-        alert('Call error: ' + error.message);
+
+        // Check if this is a token expiration error (code 20104)
+        if (error.code === 20104 || error.message?.includes('AccessTokenExpired')) {
+          console.log('Token expired, attempting to refresh...');
+          refreshTwilioToken();
+          return; // Don't show alert for token expiration, we're handling it
+        }
+        console.error('Call Error:', error);
+      },
+      onTokenWillExpire: () => {
+        console.log('Token expiration warning received, refreshing token...');
+        refreshTwilioToken();
+      },
+      onTokenRefreshed: () => {
+        console.log('Token refresh completed successfully');
       }
     });
 
@@ -641,5 +654,66 @@ async function handleInitTwilio() {
 
     // Don't show alert on auto-connect failure (silent fail for better UX)
     console.warn('Auto-connect failed. User can manually retry.');
+  }
+}
+
+/**
+ * Refresh the Twilio access token
+ * Called when the token is about to expire or has expired
+ */
+async function refreshTwilioToken() {
+  // Don't refresh if not connected
+  if (!twilioService.isReady()) {
+    console.log('Twilio not connected, skipping token refresh');
+    return;
+  }
+
+  // Check if refresh is already in progress
+  if (twilioService.isTokenRefreshInProgress()) {
+    console.log('Token refresh already in progress');
+    return;
+  }
+
+  try {
+    console.log('Fetching new Twilio token...');
+
+    // Fetch new token from backend
+    const response = await fetch(`${API_URL}/api/twilio/token`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch new Twilio token');
+    }
+
+    const data = await response.json();
+
+    if (!data.token) {
+      throw new Error('No token received from backend');
+    }
+
+    // Update the device with the new token
+    await twilioService.updateToken(data.token);
+    console.log('Twilio token refreshed successfully');
+
+  } catch (error) {
+    console.error('Failed to refresh Twilio token:', error);
+
+    // If token refresh fails during a call, don't disconnect immediately
+    // The user might still be able to complete their current call
+    if (callStore.state.state !== 'idle') {
+      console.warn('Token refresh failed during active call - call may be interrupted when token expires');
+    } else {
+      // If not in a call, try to reinitialize the connection
+      console.log('Attempting to reinitialize Twilio connection...');
+      twilioService.destroy();
+      setTimeout(() => {
+        handleInitTwilio();
+      }, 1000);
+    }
   }
 }

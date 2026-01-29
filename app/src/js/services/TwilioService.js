@@ -15,11 +15,15 @@ export class TwilioService {
       onConnected: null,
       onDisconnected: null,
       onError: null,
-      onMissedCall: null
+      onMissedCall: null,
+      onTokenWillExpire: null,
+      onTokenRefreshed: null
     };
     this.callTrackingService = callTrackingService;
     // Track incoming call details for missed call recording
     this.pendingIncomingCall = null;
+    // Track if token refresh is in progress to avoid duplicate requests
+    this.isRefreshingToken = false;
   }
 
   /**
@@ -103,6 +107,14 @@ export class TwilioService {
     // Handle device disconnection
     this.device.on('unregistered', () => {
       console.log('Twilio Device unregistered');
+    });
+
+    // Handle token expiration warning - fires ~10 seconds before token expires
+    this.device.on('tokenWillExpire', () => {
+      console.log('Twilio token will expire soon, requesting refresh...');
+      if (this.listeners.onTokenWillExpire) {
+        this.listeners.onTokenWillExpire();
+      }
     });
   }
 
@@ -359,6 +371,49 @@ export class TwilioService {
     this.isInitialized = false;
     this.currentConnection = null;
     console.log('Twilio Device destroyed');
+  }
+
+  /**
+   * Update the access token without reinitializing the device
+   * This should be called when receiving a new token before the old one expires
+   * @param {string} newToken - The new Twilio access token
+   */
+  async updateToken(newToken) {
+    if (!this.device) {
+      console.warn('Cannot update token: Twilio Device not initialized');
+      return false;
+    }
+
+    if (this.isRefreshingToken) {
+      console.log('Token refresh already in progress, skipping...');
+      return false;
+    }
+
+    this.isRefreshingToken = true;
+
+    try {
+      await this.device.updateToken(newToken);
+      console.log('Twilio token updated successfully');
+
+      if (this.listeners.onTokenRefreshed) {
+        this.listeners.onTokenRefreshed();
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to update Twilio token:', error);
+      throw error;
+    } finally {
+      this.isRefreshingToken = false;
+    }
+  }
+
+  /**
+   * Check if the device needs token refresh
+   * @returns {boolean} - True if token refresh is in progress
+   */
+  isTokenRefreshInProgress() {
+    return this.isRefreshingToken;
   }
 }
 
