@@ -21,13 +21,21 @@ CREATE TABLE IF NOT EXISTS users (
     lastname VARCHAR(100) NOT NULL,
     agent_id VARCHAR(50) NOT NULL UNIQUE,
     company_id INT NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'agent',
+    phone VARCHAR(50) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    reports_to INT NULL,
     last_call_ended_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_email (email),
     INDEX idx_agent_id (agent_id),
     INDEX idx_company_id (company_id),
+    INDEX idx_role (role),
+    INDEX idx_is_active (is_active),
+    INDEX idx_reports_to (reports_to),
     INDEX idx_last_call_ended_at (last_call_ended_at),
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (reports_to) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sessions table

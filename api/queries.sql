@@ -249,6 +249,24 @@ UPDATE users SET last_call_ended_at = ? WHERE id = ?;
 -- name: GetAllUsersByCompany :many
 SELECT * FROM users WHERE company_id = ? ORDER BY id ASC;
 
+-- name: GetUsersByRole :many
+SELECT * FROM users WHERE company_id = ? AND role = ? ORDER BY firstname ASC;
+
+-- name: GetActiveUsersByCompany :many
+SELECT * FROM users WHERE company_id = ? AND is_active = 1 ORDER BY firstname ASC;
+
+-- name: GetDirectReports :many
+SELECT * FROM users WHERE reports_to = ? ORDER BY firstname ASC;
+
+-- name: UpdateUserRole :exec
+UPDATE users SET role = ? WHERE id = ?;
+
+-- name: UpdateUserIsActive :exec
+UPDATE users SET is_active = ? WHERE id = ?;
+
+-- name: UpdateUserReportsTo :exec
+UPDATE users SET reports_to = ? WHERE id = ?;
+
 -- -----------------------
 -- Call Queue Queries
 -- -----------------------

@@ -1,6 +1,7 @@
 .PHONY: help setup dev dev-api dev-app install-api install-app build-app \
         local-up local-down local-restart local-logs local-build \
         prod-up prod-down prod-restart prod-logs prod-build \
+        migrate-up migrate-down migrate-status \
         clean
 
 # Default target
@@ -35,6 +36,11 @@ help:
 	@echo ""
 	@echo "BUILD:"
 	@echo "  make build-app     - Build frontend for production"
+	@echo ""
+	@echo "DATABASE MIGRATIONS:"
+	@echo "  make migrate-up    - Run all pending migrations"
+	@echo "  make migrate-down  - Rollback the last migration"
+	@echo "  make migrate-status- Show migration status"
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  make clean         - Clean build artifacts and Docker resources"
@@ -169,6 +175,20 @@ install-app:
 build-app:
 	@echo "Building App for production..."
 	cd app && npm run build
+
+# Database Migrations (using goose)
+# Loads DB credentials from api/.env file
+migrate-up:
+	@echo "Running database migrations..."
+	@cd api && . ./.env && goose -dir migrations mysql "$${DB_USER}:$${DB_PASSWORD}@tcp($${DB_HOST}:$${DB_PORT})/$${DB_NAME}" up
+
+migrate-down:
+	@echo "Rolling back last migration..."
+	@cd api && . ./.env && goose -dir migrations mysql "$${DB_USER}:$${DB_PASSWORD}@tcp($${DB_HOST}:$${DB_PORT})/$${DB_NAME}" down
+
+migrate-status:
+	@echo "Checking migration status..."
+	@cd api && . ./.env && goose -dir migrations mysql "$${DB_USER}:$${DB_PASSWORD}@tcp($${DB_HOST}:$${DB_PORT})/$${DB_NAME}" status
 
 # Cleanup
 clean:

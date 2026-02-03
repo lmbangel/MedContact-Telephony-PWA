@@ -270,6 +270,47 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+const getActiveUsersByCompany = `-- name: GetActiveUsersByCompany :many
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE company_id = ? AND is_active = 1 ORDER BY firstname ASC
+`
+
+func (q *Queries) GetActiveUsersByCompany(ctx context.Context, companyID int32) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, getActiveUsersByCompany, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Firstname,
+			&i.Lastname,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.Role,
+			&i.Phone,
+			&i.IsActive,
+			&i.ReportsTo,
+			&i.LastCallEndedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAgentCallHistory = `-- name: GetAgentCallHistory :many
 SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
 WHERE agent_id = ?
@@ -393,7 +434,7 @@ func (q *Queries) GetAllCustomers(ctx context.Context) ([]Customer, error) {
 }
 
 const getAllUsersByCompany = `-- name: GetAllUsersByCompany :many
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE company_id = ? ORDER BY id ASC
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE company_id = ? ORDER BY id ASC
 `
 
 func (q *Queries) GetAllUsersByCompany(ctx context.Context, companyID int32) ([]User, error) {
@@ -413,6 +454,10 @@ func (q *Queries) GetAllUsersByCompany(ctx context.Context, companyID int32) ([]
 			&i.Lastname,
 			&i.AgentID,
 			&i.CompanyID,
+			&i.Role,
+			&i.Phone,
+			&i.IsActive,
+			&i.ReportsTo,
 			&i.LastCallEndedAt,
 			&i.CreatedAt,
 		); err != nil {
@@ -767,6 +812,47 @@ func (q *Queries) GetCustomersByCompany(ctx context.Context, companyID int32) ([
 			&i.MedicalAidProvider,
 			&i.MedicalAidNumber,
 			&i.MedicalPlan,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDirectReports = `-- name: GetDirectReports :many
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE reports_to = ? ORDER BY firstname ASC
+`
+
+func (q *Queries) GetDirectReports(ctx context.Context, reportsTo sql.NullInt32) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, getDirectReports, reportsTo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Firstname,
+			&i.Lastname,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.Role,
+			&i.Phone,
+			&i.IsActive,
+			&i.ReportsTo,
+			&i.LastCallEndedAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -1177,7 +1263,7 @@ func (q *Queries) GetTodayCallStats(ctx context.Context, agentID sql.NullInt32) 
 }
 
 const getUserByAgentID = `-- name: GetUserByAgentID :one
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE agent_id = ?
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE agent_id = ?
 `
 
 func (q *Queries) GetUserByAgentID(ctx context.Context, agentID string) (User, error) {
@@ -1191,6 +1277,10 @@ func (q *Queries) GetUserByAgentID(ctx context.Context, agentID string) (User, e
 		&i.Lastname,
 		&i.AgentID,
 		&i.CompanyID,
+		&i.Role,
+		&i.Phone,
+		&i.IsActive,
+		&i.ReportsTo,
 		&i.LastCallEndedAt,
 		&i.CreatedAt,
 	)
@@ -1198,7 +1288,7 @@ func (q *Queries) GetUserByAgentID(ctx context.Context, agentID string) (User, e
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE email = ?
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE email = ?
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -1212,6 +1302,10 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Lastname,
 		&i.AgentID,
 		&i.CompanyID,
+		&i.Role,
+		&i.Phone,
+		&i.IsActive,
+		&i.ReportsTo,
 		&i.LastCallEndedAt,
 		&i.CreatedAt,
 	)
@@ -1219,7 +1313,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, last_call_ended_at, created_at FROM users WHERE id = ?
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
@@ -1233,10 +1327,60 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 		&i.Lastname,
 		&i.AgentID,
 		&i.CompanyID,
+		&i.Role,
+		&i.Phone,
+		&i.IsActive,
+		&i.ReportsTo,
 		&i.LastCallEndedAt,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getUsersByRole = `-- name: GetUsersByRole :many
+SELECT id, email, password_hash, firstname, lastname, agent_id, company_id, role, phone, is_active, reports_to, last_call_ended_at, created_at FROM users WHERE company_id = ? AND role = ? ORDER BY firstname ASC
+`
+
+type GetUsersByRoleParams struct {
+	CompanyID int32  `json:"company_id"`
+	Role      string `json:"role"`
+}
+
+func (q *Queries) GetUsersByRole(ctx context.Context, arg GetUsersByRoleParams) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, getUsersByRole, arg.CompanyID, arg.Role)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Firstname,
+			&i.Lastname,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.Role,
+			&i.Phone,
+			&i.IsActive,
+			&i.ReportsTo,
+			&i.LastCallEndedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getValidOTPCode = `-- name: GetValidOTPCode :one
@@ -1394,6 +1538,20 @@ func (q *Queries) UpdateQueueStatus(ctx context.Context, arg UpdateQueueStatusPa
 	return err
 }
 
+const updateUserIsActive = `-- name: UpdateUserIsActive :exec
+UPDATE users SET is_active = ? WHERE id = ?
+`
+
+type UpdateUserIsActiveParams struct {
+	IsActive bool  `json:"is_active"`
+	ID       int32 `json:"id"`
+}
+
+func (q *Queries) UpdateUserIsActive(ctx context.Context, arg UpdateUserIsActiveParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserIsActive, arg.IsActive, arg.ID)
+	return err
+}
+
 const updateUserLastCallEnded = `-- name: UpdateUserLastCallEnded :exec
 UPDATE users SET last_call_ended_at = ? WHERE id = ?
 `
@@ -1405,5 +1563,33 @@ type UpdateUserLastCallEndedParams struct {
 
 func (q *Queries) UpdateUserLastCallEnded(ctx context.Context, arg UpdateUserLastCallEndedParams) error {
 	_, err := q.db.ExecContext(ctx, updateUserLastCallEnded, arg.LastCallEndedAt, arg.ID)
+	return err
+}
+
+const updateUserReportsTo = `-- name: UpdateUserReportsTo :exec
+UPDATE users SET reports_to = ? WHERE id = ?
+`
+
+type UpdateUserReportsToParams struct {
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+	ID        int32         `json:"id"`
+}
+
+func (q *Queries) UpdateUserReportsTo(ctx context.Context, arg UpdateUserReportsToParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserReportsTo, arg.ReportsTo, arg.ID)
+	return err
+}
+
+const updateUserRole = `-- name: UpdateUserRole :exec
+UPDATE users SET role = ? WHERE id = ?
+`
+
+type UpdateUserRoleParams struct {
+	Role string `json:"role"`
+	ID   int32  `json:"id"`
+}
+
+func (q *Queries) UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserRole, arg.Role, arg.ID)
 	return err
 }

@@ -135,13 +135,17 @@ type Transcription struct {
 }
 
 type User struct {
-	ID              int32        `json:"id"`
-	Email           string       `json:"email"`
-	PasswordHash    string       `json:"password_hash"`
-	Firstname       string       `json:"firstname"`
-	Lastname        string       `json:"lastname"`
-	AgentID         string       `json:"agent_id"`
-	CompanyID       int32        `json:"company_id"`
-	LastCallEndedAt sql.NullTime `json:"last_call_ended_at"`
-	CreatedAt       sql.NullTime `json:"created_at"`
+	ID              int32          `json:"id"`
+	Email           string         `json:"email"`
+	PasswordHash    string         `json:"password_hash"`
+	Firstname       string         `json:"firstname"`
+	Lastname        string         `json:"lastname"`
+	AgentID         string         `json:"agent_id"`
+	CompanyID       int32          `json:"company_id"`
+	Role            string         `json:"role"`
+	Phone           sql.NullString `json:"phone"`
+	IsActive        bool           `json:"is_active"`
+	ReportsTo       sql.NullInt32  `json:"reports_to"`
+	LastCallEndedAt sql.NullTime   `json:"last_call_ended_at"`
+	CreatedAt       sql.NullTime   `json:"created_at"`
 }

@@ -424,7 +424,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Phone panel toggle - only via telephony button
-  const telephonyBtn = document.getElementById('telephony-btn');
+  const telephonyBtn = document.getElementById('side-phone-icon');
   const phonePanel = document.getElementById('phone-panel');
 
   if (telephonyBtn && phonePanel) {
