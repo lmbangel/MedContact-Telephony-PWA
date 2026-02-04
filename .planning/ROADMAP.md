@@ -31,10 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. SSE connection establishes and receives heartbeat pings
   4. SSE auto-reconnects when connection drops
   5. Memory usage stays stable over 4-hour session (under 200MB)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD during plan-phase
+- [ ] 01-01-PLAN.md — Backend SSE infrastructure with role-based auth middleware
+- [ ] 01-02-PLAN.md — Stats page frontend with SSE client and connection indicator
+- [ ] 01-03-PLAN.md — Wire sidebar navigation and verify full flow
 
 ### Phase 2: Role-Based Data Layer
 **Goal**: Database queries enforce role-based visibility at SQL level
@@ -124,7 +126,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. SSE Infrastructure & Navigation | 0/TBD | Not started | - |
+| 1. SSE Infrastructure & Navigation | 0/3 | Ready to execute | - |
 | 2. Role-Based Data Layer | 0/TBD | Not started | - |
 | 3. Core Metrics & Time Filtering | 0/TBD | Not started | - |
 | 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
