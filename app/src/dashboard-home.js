@@ -240,6 +240,13 @@ async function handleLogout() {
   window.location.href = './dashboard-login.html';
 }
 
+/**
+ * Handle navigation to stats page
+ */
+function handleNavigateToStats() {
+  window.location.href = './dashboard-stats.html';
+}
+
 // Handle status change
 async function handleStatusChange(event) {
   const newStatus = event.target.value;
@@ -288,6 +295,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusDropdown = document.getElementById('agentStatus');
   if (statusDropdown) {
     statusDropdown.addEventListener('change', handleStatusChange);
+  }
+
+  // Stats page navigation
+  const statsBtn = document.getElementById('side-stats-icon');
+  if (statsBtn) {
+    statsBtn.addEventListener('click', handleNavigateToStats);
   }
 
   // Task filter dropdowns
