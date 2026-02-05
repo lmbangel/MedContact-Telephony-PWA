@@ -14,6 +14,8 @@ import (
 
 	// "net/smtp" // Uncomment when using SMTP email sending
 	"omnicall/db"
+	"omnicall/handlers"
+	customMiddleware "omnicall/middleware"
 	"os"
 	"strings"
 	"time"
@@ -217,6 +219,9 @@ func main() {
 	queries := db.New(database)
 	server := &Server{db: database, queries: queries}
 
+	// Create SSE server for real-time stats streaming
+	sseServer := handlers.NewSSEServer(queries)
+
 	// Setup router
 	r := chi.NewRouter()
 
@@ -303,6 +308,12 @@ func main() {
 	r.Post("/twilio/dequeue-dial", server.handleDequeueDial)
 	r.Get("/twilio/dequeue-dial", server.handleDequeueDial)
 
+	// Stats SSE endpoint (role-protected)
+	r.Group(func(r chi.Router) {
+		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support"))
+		r.Get("/api/stats/stream", sseServer.HandleStatsStream)
+	})
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8000"
@@ -312,7 +323,8 @@ func main() {
 	fmt.Println("📊 Health check: http://localhost:" + port + "/api/health")
 	fmt.Println("🔐 Auth API: http://localhost:" + port + "/api/auth")
 	fmt.Println("🏢 Companies API: http://localhost:" + port + "/api/companies")
-	fmt.Println("📞 Twilio API: http://localhost:" + port + "/api/twilio\n")
+	fmt.Println("📞 Twilio API: http://localhost:" + port + "/api/twilio")
+	fmt.Println("📊 Stats SSE: http://localhost:" + port + "/api/stats/stream\n")
 
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
