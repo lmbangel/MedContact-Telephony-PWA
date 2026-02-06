@@ -151,10 +151,117 @@ function handleSSEError(error) {
 }
 
 /**
+ * Load companies for support role filter
+ */
+async function loadCompanies() {
+  try {
+    const response = await fetch(`${API_URL}/api/companies`, {
+      credentials: 'include'
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      console.error('Failed to load companies');
+      return;
+    }
+
+    const select = document.getElementById('companyFilter');
+    data.companies.forEach(company => {
+      const option = document.createElement('option');
+      option.value = company.id;
+      option.textContent = company.name;
+      select.appendChild(option);
+    });
+
+    // Listen for company filter changes
+    select.addEventListener('change', (e) => {
+      const companyId = e.target.value;
+      loadStatsForCompany(companyId);
+    });
+  } catch (error) {
+    console.error('Error loading companies:', error);
+  }
+}
+
+/**
+ * Load stats for selected company
+ */
+async function loadStatsForCompany(companyId) {
+  const params = companyId ? `?company_id=${companyId}` : '';
+
+  try {
+    // Fetch task stats with company filter
+    const taskResponse = await fetch(`${API_URL}/api/stats/tasks${params}`, {
+      credentials: 'include'
+    });
+    const taskData = await taskResponse.json();
+
+    // Fetch call stats with company filter
+    const callResponse = await fetch(`${API_URL}/api/stats/calls${params}`, {
+      credentials: 'include'
+    });
+    const callData = await callResponse.json();
+
+    // Update UI with stats
+    updateStatsDisplay(taskData.stats, callData.stats);
+  } catch (error) {
+    console.error('Error loading stats:', error);
+  }
+}
+
+/**
+ * Update stats display
+ */
+function updateStatsDisplay(taskStats, callStats) {
+  const content = document.getElementById('statsContent');
+
+  // Handle different stat structures based on role
+  const totalCalls = callStats.total_calls || 0;
+  const totalTasks = taskStats.total_tasks || 0;
+  const answeredCalls = callStats.answered_calls || 0;
+  const completedTasks = taskStats.completed_tasks || 0;
+
+  content.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500">Total Calls</h3>
+        <p class="text-2xl font-bold text-gray-900 mt-2">${totalCalls}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500">Answered Calls</h3>
+        <p class="text-2xl font-bold text-green-600 mt-2">${answeredCalls}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500">Total Tasks</h3>
+        <p class="text-2xl font-bold text-gray-900 mt-2">${totalTasks}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500">Completed Tasks</h3>
+        <p class="text-2xl font-bold text-blue-600 mt-2">${completedTasks}</p>
+      </div>
+    </div>
+  `;
+}
+
+/**
  * Initialize stats page
  */
-function initializeStatsPage() {
+async function initializeStatsPage() {
   console.log('Initializing stats page with SSE connection');
+
+  // Check user role and show company filter for support
+  const user = authService.getCurrentUser();
+  if (user.role === 'support') {
+    // Show company filter for support role
+    const filterContainer = document.getElementById('companyFilterContainer');
+    filterContainer.classList.remove('hidden');
+
+    // Populate company dropdown
+    await loadCompanies();
+  } else {
+    // For other roles, load stats immediately
+    await loadStatsForCompany('');
+  }
 
   // Setup SSE listeners
   sseService.setListeners({
