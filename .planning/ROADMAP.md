@@ -49,10 +49,12 @@ Plans:
   4. Support user can filter by company via dropdown
   5. All users can filter agents within their allowed scope
   6. Unauthorized data never reaches client (verified at SQL level)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD during plan-phase
+- [ ] 02-01-PLAN.md — Add role-based SQL queries with WHERE clauses and recursive CTEs
+- [ ] 02-02-PLAN.md — Update API handlers with role routing and add company filter UI
+- [ ] 02-03-PLAN.md — Verify role-based access control blocks unauthorized data
 
 ### Phase 3: Core Metrics & Time Filtering
 **Goal**: Backend aggregates call, task, outcome, and activity metrics for filtered time periods
@@ -127,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. SSE Infrastructure & Navigation | 3/3 | Complete | 2026-02-06 |
-| 2. Role-Based Data Layer | 0/TBD | Ready to plan | - |
+| 2. Role-Based Data Layer | 0/3 | Ready to execute | - |
 | 3. Core Metrics & Time Filtering | 0/TBD | Not started | - |
 | 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
 | 5. Chart Visualization | 0/TBD | Not started | - |
