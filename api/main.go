@@ -222,6 +222,9 @@ func main() {
 	// Create SSE server for real-time stats streaming
 	sseServer := handlers.NewSSEServer(queries)
 
+	// Create stats handler for role-based stats endpoints
+	statsHandler := handlers.NewStatsHandler(queries)
+
 	// Setup router
 	r := chi.NewRouter()
 
@@ -312,6 +315,13 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support"))
 		r.Get("/api/stats/stream", sseServer.HandleStatsStream)
+	})
+
+	// Stats endpoints (role-based)
+	r.Route("/api/stats", func(r chi.Router) {
+		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support", "agent"))
+		r.Get("/tasks", statsHandler.GetTaskStats)
+		r.Get("/calls", statsHandler.GetCallStats)
 	})
 
 	port := os.Getenv("PORT")
