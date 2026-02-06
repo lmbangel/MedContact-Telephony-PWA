@@ -270,9 +270,12 @@ func main() {
 	r.Post("/api/auth/otp/send", server.sendOTP)
 	r.Post("/api/auth/otp/verify", server.verifyOTP)
 
-	// Company routes
-	r.Get("/api/companies", server.getCompanies)
-	r.Post("/api/companies", server.createCompany)
+	// Company routes (protected - support role filtering)
+	r.Route("/api/companies", func(r chi.Router) {
+		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support"))
+		r.Get("/", server.getCompanies)
+		r.Post("/", server.createCompany)
+	})
 
 	// Customer routes
 	r.Get("/api/customers", server.getCustomers)
