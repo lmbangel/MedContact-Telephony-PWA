@@ -270,11 +270,12 @@ func main() {
 	r.Post("/api/auth/otp/send", server.sendOTP)
 	r.Post("/api/auth/otp/verify", server.verifyOTP)
 
-	// Company routes (protected - support role filtering)
+	// Company routes
 	r.Route("/api/companies", func(r chi.Router) {
-		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support"))
+		// GET - all authenticated users can read companies (for header display)
 		r.Get("/", server.getCompanies)
-		r.Post("/", server.createCompany)
+		// POST - only admin/support can create companies
+		r.With(customMiddleware.RequireRole(queries, "admin", "support")).Post("/", server.createCompany)
 	})
 
 	// Customer routes
