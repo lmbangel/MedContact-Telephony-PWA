@@ -12,7 +12,7 @@ This roadmap delivers a supervisor/manager stats dashboard to the existing MedCo
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: SSE Infrastructure & Navigation** - Real-time foundation with connection management
+- [x] **Phase 1: SSE Infrastructure & Navigation** - Real-time foundation with connection management
 - [ ] **Phase 2: Role-Based Data Layer** - Security-critical SQL aggregation with role filtering
 - [ ] **Phase 3: Core Metrics & Time Filtering** - Stats aggregation for calls, tasks, outcomes, activity
 - [ ] **Phase 4: Dashboard UI & Summary Cards** - Basic stats page with key metrics display
@@ -34,9 +34,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Backend SSE infrastructure with role-based auth middleware
-- [ ] 01-02-PLAN.md — Stats page frontend with SSE client and connection indicator
-- [ ] 01-03-PLAN.md — Wire sidebar navigation and verify full flow
+- [x] 01-01-PLAN.md — Backend SSE infrastructure with role-based auth middleware
+- [x] 01-02-PLAN.md — Stats page frontend with SSE client and connection indicator
+- [x] 01-03-PLAN.md — Wire sidebar navigation and verify full flow
 
 ### Phase 2: Role-Based Data Layer
 **Goal**: Database queries enforce role-based visibility at SQL level
@@ -126,8 +126,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. SSE Infrastructure & Navigation | 0/3 | Ready to execute | - |
-| 2. Role-Based Data Layer | 0/TBD | Not started | - |
+| 1. SSE Infrastructure & Navigation | 3/3 | Complete | 2026-02-06 |
+| 2. Role-Based Data Layer | 0/TBD | Ready to plan | - |
 | 3. Core Metrics & Time Filtering | 0/TBD | Not started | - |
 | 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
 | 5. Chart Visualization | 0/TBD | Not started | - |
