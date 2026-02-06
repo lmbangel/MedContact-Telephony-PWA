@@ -593,6 +593,48 @@ func (q *Queries) GetCallStatsByCompany(ctx context.Context, companyID int32) (G
 	return i, err
 }
 
+const getCallStatsByManager = `-- name: GetCallStatsByManager :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates)
+`
+
+type GetCallStatsByManagerParams struct {
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+	CompanyID int32         `json:"company_id"`
+}
+
+type GetCallStatsByManagerRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByManager(ctx context.Context, arg GetCallStatsByManagerParams) (GetCallStatsByManagerRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByManager, arg.ReportsTo, arg.CompanyID)
+	var i GetCallStatsByManagerRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
 const getCallsByCompany = `-- name: GetCallsByCompany :many
 SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
 WHERE company_id = ?
@@ -652,6 +694,69 @@ LIMIT 20
 
 func (q *Queries) GetCallsByCustomer(ctx context.Context, customerID sql.NullInt32) ([]Transcription, error) {
 	rows, err := q.db.QueryContext(ctx, getCallsByCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transcription{}
+	for rows.Next() {
+		var i Transcription
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerID,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.CallSid,
+			&i.RecordingSid,
+			&i.RecordingUrl,
+			&i.RecordingDuration,
+			&i.RecordingStatus,
+			&i.RecordingChannels,
+			&i.RecordingStartTime,
+			&i.Transcript,
+			&i.Summary,
+			&i.FromNumber,
+			&i.ToNumber,
+			&i.CallStatus,
+			&i.Duration,
+			&i.CallReason,
+			&i.TranscriptionText,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCallsByManager = `-- name: GetCallsByManager :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT t.id, t.customer_id, t.agent_id, t.company_id, t.call_sid, t.recording_sid, t.recording_url, t.recording_duration, t.recording_status, t.recording_channels, t.recording_start_time, t.transcript, t.summary, t.from_number, t.to_number, t.call_status, t.duration, t.call_reason, t.transcription_text, t.created_at FROM transcriptions t
+WHERE t.agent_id IN (SELECT id FROM subordinates)
+ORDER BY t.created_at DESC
+`
+
+type GetCallsByManagerParams struct {
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+	CompanyID int32         `json:"company_id"`
+}
+
+func (q *Queries) GetCallsByManager(ctx context.Context, arg GetCallsByManagerParams) ([]Transcription, error) {
+	rows, err := q.db.QueryContext(ctx, getCallsByManager, arg.ReportsTo, arg.CompanyID)
 	if err != nil {
 		return nil, err
 	}
@@ -1101,6 +1206,71 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 	return i, err
 }
 
+const getSubordinatesByManager = `-- name: GetSubordinatesByManager :many
+
+WITH RECURSIVE subordinates AS (
+    SELECT u.id, u.firstname, u.lastname, u.agent_id, u.company_id, u.role, u.reports_to
+    FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id, u.firstname, u.lastname, u.agent_id, u.company_id, u.role, u.reports_to
+    FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT id, firstname, lastname, agent_id, company_id, role, reports_to FROM subordinates
+ORDER BY firstname ASC, lastname ASC
+`
+
+type GetSubordinatesByManagerParams struct {
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+	CompanyID int32         `json:"company_id"`
+}
+
+type GetSubordinatesByManagerRow struct {
+	ID        int32         `json:"id"`
+	Firstname string        `json:"firstname"`
+	Lastname  string        `json:"lastname"`
+	AgentID   string        `json:"agent_id"`
+	CompanyID int32         `json:"company_id"`
+	Role      string        `json:"role"`
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+}
+
+// -----------------------
+// Role-Based Authorization Queries - Manager (Hierarchy-Scoped)
+// -----------------------
+func (q *Queries) GetSubordinatesByManager(ctx context.Context, arg GetSubordinatesByManagerParams) ([]GetSubordinatesByManagerRow, error) {
+	rows, err := q.db.QueryContext(ctx, getSubordinatesByManager, arg.ReportsTo, arg.CompanyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetSubordinatesByManagerRow{}
+	for rows.Next() {
+		var i GetSubordinatesByManagerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Firstname,
+			&i.Lastname,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.Role,
+			&i.ReportsTo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTaskByID = `-- name: GetTaskByID :one
 SELECT id, assigned_to, customer_id, call_id, title, description, type, status, due_date, created_at FROM tasks WHERE id = ?
 `
@@ -1188,6 +1358,57 @@ type GetTaskStatsByCompanyRow struct {
 func (q *Queries) GetTaskStatsByCompany(ctx context.Context, companyID int32) (GetTaskStatsByCompanyRow, error) {
 	row := q.db.QueryRowContext(ctx, getTaskStatsByCompany, companyID)
 	var i GetTaskStatsByCompanyRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByManager = `-- name: GetTaskStatsByManager :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates)
+`
+
+type GetTaskStatsByManagerParams struct {
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+	CompanyID int32         `json:"company_id"`
+}
+
+type GetTaskStatsByManagerRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByManager(ctx context.Context, arg GetTaskStatsByManagerParams) (GetTaskStatsByManagerRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByManager, arg.ReportsTo, arg.CompanyID)
+	var i GetTaskStatsByManagerRow
 	err := row.Scan(
 		&i.TotalTasks,
 		&i.PendingTasks,
@@ -1291,6 +1512,59 @@ ORDER BY created_at DESC
 
 func (q *Queries) GetTasksByCustomer(ctx context.Context, customerID sql.NullInt32) ([]Task, error) {
 	rows, err := q.db.QueryContext(ctx, getTasksByCustomer, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Task{}
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssignedTo,
+			&i.CustomerID,
+			&i.CallID,
+			&i.Title,
+			&i.Description,
+			&i.Type,
+			&i.Status,
+			&i.DueDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTasksByManager = `-- name: GetTasksByManager :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT t.id, t.assigned_to, t.customer_id, t.call_id, t.title, t.description, t.type, t.status, t.due_date, t.created_at FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates)
+ORDER BY t.created_at DESC
+`
+
+type GetTasksByManagerParams struct {
+	ReportsTo sql.NullInt32 `json:"reports_to"`
+	CompanyID int32         `json:"company_id"`
+}
+
+func (q *Queries) GetTasksByManager(ctx context.Context, arg GetTasksByManagerParams) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getTasksByManager, arg.ReportsTo, arg.CompanyID)
 	if err != nil {
 		return nil, err
 	}

@@ -345,3 +345,84 @@ SELECT
     COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
 FROM transcriptions
 WHERE company_id = ?;
+
+-- -----------------------
+-- Role-Based Authorization Queries - Manager (Hierarchy-Scoped)
+-- -----------------------
+
+-- name: GetSubordinatesByManager :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id, u.firstname, u.lastname, u.agent_id, u.company_id, u.role, u.reports_to
+    FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id, u.firstname, u.lastname, u.agent_id, u.company_id, u.role, u.reports_to
+    FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT * FROM subordinates
+ORDER BY firstname ASC, lastname ASC;
+
+-- name: GetTasksByManager :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT t.* FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates)
+ORDER BY t.created_at DESC;
+
+-- name: GetCallsByManager :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT t.* FROM transcriptions t
+WHERE t.agent_id IN (SELECT id FROM subordinates)
+ORDER BY t.created_at DESC;
+
+-- name: GetTaskStatsByManager :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates);
+
+-- name: GetCallStatsByManager :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u
+    WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u
+    JOIN subordinates s ON u.reports_to = s.id
+    WHERE u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates);
