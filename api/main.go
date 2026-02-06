@@ -571,6 +571,7 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 			Lastname:  user.Lastname,
 			AgentID:   user.AgentID,
 			CompanyID: user.CompanyID,
+			Role:      user.Role,
 		},
 	})
 }
