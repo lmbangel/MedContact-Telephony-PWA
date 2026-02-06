@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 2 of 6 (Role-Based Data Layer)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-06 — Completed 02-01-PLAN.md
+Last activity: 2026-02-06 — Completed 02-02-PLAN.md
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 3.3 minutes
-- Total execution time: 0.17 hours
+- Total plans completed: 4
+- Average duration: 4.0 minutes
+- Total execution time: 0.26 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-sse-infrastructure-navigation | 2 | 6.4 min | 3.2 min |
-| 02-role-based-data-layer | 1 | 3.4 min | 3.4 min |
+| 02-role-based-data-layer | 2 | 8.8 min | 4.4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3.4m), 01-02 (3.0m), 02-01 (3.4m)
-- Trend: Consistent velocity
+- Last 5 plans: 01-01 (3.4m), 01-02 (3.0m), 02-01 (3.4m), 02-02 (5.4m)
+- Trend: Slight increase (more complex API work)
 
 *Updated after each plan completion*
 
@@ -52,6 +52,9 @@ Recent decisions affecting current work:
 - Filter at SQL layer: All queries enforce company_id or reports_to filters to prevent unauthorized data access (02-01)
 - Recursive CTEs for hierarchy: Manager queries use recursive CTEs to traverse multi-level reporting structures (02-01)
 - Active users only in hierarchy: All hierarchy queries filter by is_active = 1 to exclude deactivated users (02-01)
+- Role-based handler routing: API handlers switch on user.Role to call appropriate query (GetTaskStatsByCompany, GetTaskStatsByManager, etc.) (02-02)
+- Support requires company_id: Support role must provide company_id parameter, never gets unfiltered all-companies data (02-02)
+- Company filter UI: Support role sees company dropdown, other roles load stats immediately (02-02)
 
 ### Pending Todos
 
@@ -69,5 +72,5 @@ Research identified critical pitfalls to address:
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 02-01-PLAN.md - Role-based SQL queries with recursive CTEs
+Stopped at: Completed 02-02-PLAN.md - Role-based stats handlers and company filter UI
 Resume file: None
