@@ -308,3 +308,40 @@ UPDATE call_queue SET status = 'connected', updated_at = NOW() WHERE call_sid = 
 
 -- name: MarkQueueEntryAbandoned :exec
 UPDATE call_queue SET status = 'abandoned', updated_at = NOW() WHERE call_sid = ?;
+
+-- -----------------------
+-- Role-Based Authorization Queries - Admin (Company-Scoped)
+-- -----------------------
+
+-- name: GetTasksByCompany :many
+SELECT t.* FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ?
+ORDER BY t.created_at DESC;
+
+-- name: GetCallsByCompany :many
+SELECT * FROM transcriptions
+WHERE company_id = ?
+ORDER BY created_at DESC;
+
+-- name: GetTaskStatsByCompany :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ?;
+
+-- name: GetCallStatsByCompany :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ?;

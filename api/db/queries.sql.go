@@ -564,6 +564,85 @@ func (q *Queries) GetCallBySid(ctx context.Context, callSid string) (Transcripti
 	return i, err
 }
 
+const getCallStatsByCompany = `-- name: GetCallStatsByCompany :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ?
+`
+
+type GetCallStatsByCompanyRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByCompany(ctx context.Context, companyID int32) (GetCallStatsByCompanyRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByCompany, companyID)
+	var i GetCallStatsByCompanyRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallsByCompany = `-- name: GetCallsByCompany :many
+SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
+WHERE company_id = ?
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetCallsByCompany(ctx context.Context, companyID int32) ([]Transcription, error) {
+	rows, err := q.db.QueryContext(ctx, getCallsByCompany, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transcription{}
+	for rows.Next() {
+		var i Transcription
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerID,
+			&i.AgentID,
+			&i.CompanyID,
+			&i.CallSid,
+			&i.RecordingSid,
+			&i.RecordingUrl,
+			&i.RecordingDuration,
+			&i.RecordingStatus,
+			&i.RecordingChannels,
+			&i.RecordingStartTime,
+			&i.Transcript,
+			&i.Summary,
+			&i.FromNumber,
+			&i.ToNumber,
+			&i.CallStatus,
+			&i.Duration,
+			&i.CallReason,
+			&i.TranscriptionText,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCallsByCustomer = `-- name: GetCallsByCustomer :many
 SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
 WHERE customer_id = ?
@@ -1082,6 +1161,45 @@ func (q *Queries) GetTaskStats(ctx context.Context, assignedTo int32) (GetTaskSt
 	return i, err
 }
 
+const getTaskStatsByCompany = `-- name: GetTaskStatsByCompany :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ?
+`
+
+type GetTaskStatsByCompanyRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByCompany(ctx context.Context, companyID int32) (GetTaskStatsByCompanyRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByCompany, companyID)
+	var i GetTaskStatsByCompanyRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
 const getTaskStatsByStatus = `-- name: GetTaskStatsByStatus :one
 SELECT
     COUNT(*) as task_count
@@ -1118,6 +1236,51 @@ func (q *Queries) GetTaskStatsByType(ctx context.Context, arg GetTaskStatsByType
 	var task_count int64
 	err := row.Scan(&task_count)
 	return task_count, err
+}
+
+const getTasksByCompany = `-- name: GetTasksByCompany :many
+
+SELECT t.id, t.assigned_to, t.customer_id, t.call_id, t.title, t.description, t.type, t.status, t.due_date, t.created_at FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ?
+ORDER BY t.created_at DESC
+`
+
+// -----------------------
+// Role-Based Authorization Queries - Admin (Company-Scoped)
+// -----------------------
+func (q *Queries) GetTasksByCompany(ctx context.Context, companyID int32) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getTasksByCompany, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Task{}
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssignedTo,
+			&i.CustomerID,
+			&i.CallID,
+			&i.Title,
+			&i.Description,
+			&i.Type,
+			&i.Status,
+			&i.DueDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTasksByCustomer = `-- name: GetTasksByCustomer :many
