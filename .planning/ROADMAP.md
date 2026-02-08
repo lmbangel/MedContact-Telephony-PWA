@@ -69,10 +69,12 @@ Plans:
   6. User can select custom date range
   7. Stats update when time filter changes
   8. Queries complete in under 1 second with 10k+ records
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD during plan-phase
+- [ ] 03-01-PLAN.md — Database indexes and time-filtered call/task queries
+- [ ] 03-02-PLAN.md — Activity tracking queries and handler time routing
+- [ ] 03-03-PLAN.md — Time filter UI with quick buttons and custom range picker
 
 ### Phase 4: Dashboard UI & Summary Cards
 **Goal**: Stats page displays key metrics in summary cards with role-appropriate filtering
@@ -130,7 +132,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. SSE Infrastructure & Navigation | 3/3 | Complete | 2026-02-06 |
 | 2. Role-Based Data Layer | 3/3 | Complete | 2026-02-08 |
-| 3. Core Metrics & Time Filtering | 0/TBD | Ready to plan | - |
+| 3. Core Metrics & Time Filtering | 0/3 | Ready to execute | - |
 | 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
 | 5. Chart Visualization | 0/TBD | Not started | - |
 | 6. Export & Polish | 0/TBD | Not started | - |
