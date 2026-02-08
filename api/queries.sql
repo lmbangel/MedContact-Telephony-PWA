@@ -346,6 +346,51 @@ SELECT
 FROM transcriptions
 WHERE company_id = ?;
 
+-- name: GetCallStatsByCompanyToday :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND DATE(created_at) = CURDATE();
+
+-- name: GetCallStatsByCompanyYesterday :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY);
+
+-- name: GetCallStatsByCompanyThisWeek :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1);
+
+-- name: GetCallStatsByCompanyThisMonth :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE());
+
+-- name: GetCallStatsByCompanyRange :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND created_at >= ? AND created_at < ?;
+
 -- -----------------------
 -- Role-Based Authorization Queries - Manager (Hierarchy-Scoped)
 -- -----------------------
@@ -426,3 +471,73 @@ SELECT
     COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
 FROM transcriptions
 WHERE agent_id IN (SELECT id FROM subordinates);
+
+-- name: GetCallStatsByManagerToday :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND DATE(created_at) = CURDATE();
+
+-- name: GetCallStatsByManagerYesterday :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY);
+
+-- name: GetCallStatsByManagerThisWeek :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1);
+
+-- name: GetCallStatsByManagerThisMonth :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE());
+
+-- name: GetCallStatsByManagerRange :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND created_at >= ? AND created_at < ?;
