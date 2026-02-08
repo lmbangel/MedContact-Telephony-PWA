@@ -13,7 +13,7 @@ This roadmap delivers a supervisor/manager stats dashboard to the existing MedCo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: SSE Infrastructure & Navigation** - Real-time foundation with connection management
-- [ ] **Phase 2: Role-Based Data Layer** - Security-critical SQL aggregation with role filtering
+- [x] **Phase 2: Role-Based Data Layer** - Security-critical SQL aggregation with role filtering
 - [ ] **Phase 3: Core Metrics & Time Filtering** - Stats aggregation for calls, tasks, outcomes, activity
 - [ ] **Phase 4: Dashboard UI & Summary Cards** - Basic stats page with key metrics display
 - [ ] **Phase 5: Chart Visualization** - Trend charts with incremental updates
@@ -52,9 +52,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Add role-based SQL queries with WHERE clauses and recursive CTEs
-- [ ] 02-02-PLAN.md — Update API handlers with role routing and add company filter UI
-- [ ] 02-03-PLAN.md — Verify role-based access control blocks unauthorized data
+- [x] 02-01-PLAN.md — Add role-based SQL queries with WHERE clauses and recursive CTEs
+- [x] 02-02-PLAN.md — Update API handlers with role routing and add company filter UI
+- [x] 02-03-PLAN.md — Verify role-based access control blocks unauthorized data
 
 ### Phase 3: Core Metrics & Time Filtering
 **Goal**: Backend aggregates call, task, outcome, and activity metrics for filtered time periods
@@ -129,8 +129,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. SSE Infrastructure & Navigation | 3/3 | Complete | 2026-02-06 |
-| 2. Role-Based Data Layer | 0/3 | Ready to execute | - |
-| 3. Core Metrics & Time Filtering | 0/TBD | Not started | - |
+| 2. Role-Based Data Layer | 3/3 | Complete | 2026-02-08 |
+| 3. Core Metrics & Time Filtering | 0/TBD | Ready to plan | - |
 | 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
 | 5. Chart Visualization | 0/TBD | Not started | - |
 | 6. Export & Polish | 0/TBD | Not started | - |

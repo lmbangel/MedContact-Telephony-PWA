@@ -101,15 +101,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NAV-01 | Phase 1 | Pending |
-| NAV-02 | Phase 1 | Pending |
-| REAL-01 | Phase 1 | Pending |
-| REAL-02 | Phase 1 | Pending |
-| ROLE-01 | Phase 2 | Pending |
-| ROLE-02 | Phase 2 | Pending |
-| ROLE-03 | Phase 2 | Pending |
-| ROLE-04 | Phase 2 | Pending |
-| ROLE-05 | Phase 2 | Pending |
+| NAV-01 | Phase 1 | Complete |
+| NAV-02 | Phase 1 | Complete |
+| REAL-01 | Phase 1 | Complete |
+| REAL-02 | Phase 1 | Complete |
+| ROLE-01 | Phase 2 | Complete |
+| ROLE-02 | Phase 2 | Complete |
+| ROLE-03 | Phase 2 | Complete |
+| ROLE-04 | Phase 2 | Complete |
+| ROLE-05 | Phase 2 | Complete |
 | CALL-01 | Phase 3 | Pending |
 | CALL-02 | Phase 3 | Pending |
 | CALL-03 | Phase 3 | Pending |
