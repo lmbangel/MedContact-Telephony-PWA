@@ -133,7 +133,7 @@ func (h *StatsHandler) GetTaskStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/stats/calls - Role-based call statistics
+// GET /api/stats/calls?filter_type=today|yesterday|this_week|this_month|custom&start_date=2026-02-01&end_date=2026-02-07
 func (h *StatsHandler) GetCallStats(w http.ResponseWriter, r *http.Request) {
 	// Extract authenticated user from session cookie
 	cookie, err := r.Cookie("session_id")
@@ -161,53 +161,33 @@ func (h *StatsHandler) GetCallStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Route to appropriate query based on role
+	// Parse filter type parameter (default: today)
+	filterType := r.URL.Query().Get("filter_type")
+	if filterType == "" {
+		filterType = "today"
+	}
+
+	// Route to appropriate query based on role AND filter type
 	var stats interface{}
 	switch user.Role {
 	case "admin":
-		// Admin gets stats for all calls in their company
-		stats, err = h.queries.GetCallStatsByCompany(r.Context(), user.CompanyID)
-		if err != nil {
-			log.Printf("Failed to get admin call stats: %v", err)
-			respondError(w, http.StatusInternalServerError, "Failed to get call stats")
-			return
-		}
-
+		stats, err = h.getCallStatsForCompany(r, user.CompanyID, filterType)
 	case "manager", "supervisor":
-		// Manager gets stats for their subordinates' calls
-		stats, err = h.queries.GetCallStatsByManager(r.Context(), db.GetCallStatsByManagerParams{
-			ReportsTo: sql.NullInt32{Int32: user.ID, Valid: true},
-			CompanyID: user.CompanyID,
-		})
-		if err != nil {
-			log.Printf("Failed to get manager call stats: %v", err)
-			respondError(w, http.StatusInternalServerError, "Failed to get call stats")
-			return
-		}
-
+		stats, err = h.getCallStatsForManager(r, user.ID, user.CompanyID, filterType)
 	case "support":
-		// Support gets stats filtered by company_id parameter
 		companyIDStr := r.URL.Query().Get("company_id")
 		if companyIDStr == "" {
 			respondError(w, http.StatusBadRequest, "Support role must provide company_id parameter")
 			return
 		}
-
 		companyID, err := strconv.ParseInt(companyIDStr, 10, 32)
 		if err != nil {
 			respondError(w, http.StatusBadRequest, "Invalid company_id parameter")
 			return
 		}
-
-		stats, err = h.queries.GetCallStatsByCompany(r.Context(), int32(companyID))
-		if err != nil {
-			log.Printf("Failed to get support call stats: %v", err)
-			respondError(w, http.StatusInternalServerError, "Failed to get call stats")
-			return
-		}
-
+		stats, err = h.getCallStatsForCompany(r, int32(companyID), filterType)
 	case "agent":
-		// Agent gets their own call stats (existing query)
+		// Agent gets their own stats (existing single-agent query)
 		agentStats, err := h.queries.GetTodayCallStats(r.Context(), sql.NullInt32{
 			Int32: user.ID,
 			Valid: true,
@@ -226,7 +206,7 @@ func (h *StatsHandler) GetCallStats(w http.ResponseWriter, r *http.Request) {
 				avgDuration = v
 			case int64:
 				avgDuration = float64(v)
-			case []uint8: // MySQL DECIMAL can come as []byte
+			case []uint8:
 				fmt.Sscanf(string(v), "%f", &avgDuration)
 			default:
 				avgDuration = 0
@@ -239,9 +219,14 @@ func (h *StatsHandler) GetCallStats(w http.ResponseWriter, r *http.Request) {
 			"missed_calls":   agentStats.MissedCalls,
 			"avg_duration":   avgDuration,
 		}
-
 	default:
 		respondError(w, http.StatusForbidden, "Unknown role")
+		return
+	}
+
+	if err != nil {
+		log.Printf("Failed to get call stats: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve call statistics")
 		return
 	}
 
@@ -250,6 +235,121 @@ func (h *StatsHandler) GetCallStats(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"stats":   stats,
 	})
+}
+
+// Helper to route by filter type for company-level call stats
+func (h *StatsHandler) getCallStatsForCompany(r *http.Request, companyID int32, filterType string) (interface{}, error) {
+	ctx := r.Context()
+
+	switch filterType {
+	case "today":
+		return h.queries.GetCallStatsByCompanyToday(ctx, companyID)
+	case "yesterday":
+		return h.queries.GetCallStatsByCompanyYesterday(ctx, companyID)
+	case "this_week":
+		return h.queries.GetCallStatsByCompanyThisWeek(ctx, companyID)
+	case "this_month":
+		return h.queries.GetCallStatsByCompanyThisMonth(ctx, companyID)
+	case "custom":
+		startStr := r.URL.Query().Get("start_date")
+		endStr := r.URL.Query().Get("end_date")
+
+		if startStr == "" || endStr == "" {
+			return nil, fmt.Errorf("custom filter requires start_date and end_date parameters")
+		}
+
+		// Parse ISO 8601 dates (YYYY-MM-DD format)
+		startTime, err := time.Parse("2006-01-02", startStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_date format (use YYYY-MM-DD)")
+		}
+
+		endTime, err := time.Parse("2006-01-02", endStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_date format (use YYYY-MM-DD)")
+		}
+
+		// Validate range logic
+		if startTime.After(endTime) {
+			return nil, fmt.Errorf("start_date must be before or equal to end_date")
+		}
+
+		// Adjust end time to include entire end date (add 1 day)
+		endTime = endTime.AddDate(0, 0, 1)
+
+		return h.queries.GetCallStatsByCompanyRange(ctx, db.GetCallStatsByCompanyRangeParams{
+			CompanyID: companyID,
+			CreatedAt: startTime,
+			CreatedAt_2: endTime,
+		})
+	default:
+		return nil, fmt.Errorf("unknown filter type: %s", filterType)
+	}
+}
+
+// Helper to route by filter type for manager-level call stats
+func (h *StatsHandler) getCallStatsForManager(r *http.Request, managerID, companyID int32, filterType string) (interface{}, error) {
+	ctx := r.Context()
+
+	switch filterType {
+	case "today":
+		return h.queries.GetCallStatsByManagerToday(ctx, db.GetCallStatsByManagerTodayParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "yesterday":
+		return h.queries.GetCallStatsByManagerYesterday(ctx, db.GetCallStatsByManagerYesterdayParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "this_week":
+		return h.queries.GetCallStatsByManagerThisWeek(ctx, db.GetCallStatsByManagerThisWeekParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "this_month":
+		return h.queries.GetCallStatsByManagerThisMonth(ctx, db.GetCallStatsByManagerThisMonthParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "custom":
+		startStr := r.URL.Query().Get("start_date")
+		endStr := r.URL.Query().Get("end_date")
+
+		if startStr == "" || endStr == "" {
+			return nil, fmt.Errorf("custom filter requires start_date and end_date parameters")
+		}
+
+		startTime, err := time.Parse("2006-01-02", startStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_date format (use YYYY-MM-DD)")
+		}
+
+		endTime, err := time.Parse("2006-01-02", endStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_date format (use YYYY-MM-DD)")
+		}
+
+		if startTime.After(endTime) {
+			return nil, fmt.Errorf("start_date must be before or equal to end_date")
+		}
+
+		endTime = endTime.AddDate(0, 0, 1)
+
+		return h.queries.GetCallStatsByManagerRange(ctx, db.GetCallStatsByManagerRangeParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+			CreatedAt: startTime,
+			CreatedAt_2: endTime,
+		})
+	default:
+		return nil, fmt.Errorf("unknown filter type: %s", filterType)
+	}
 }
 
 func respondError(w http.ResponseWriter, code int, message string) {
