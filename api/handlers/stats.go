@@ -19,7 +19,7 @@ func NewStatsHandler(queries *db.Queries) *StatsHandler {
 	return &StatsHandler{queries: queries}
 }
 
-// GET /api/stats/tasks - Role-based task statistics
+// GET /api/stats/tasks?filter_type=today|yesterday|this_week|this_month|custom&start_date=2026-02-01&end_date=2026-02-07
 func (h *StatsHandler) GetTaskStats(w http.ResponseWriter, r *http.Request) {
 	// Extract authenticated user from session cookie
 	cookie, err := r.Cookie("session_id")
@@ -47,51 +47,31 @@ func (h *StatsHandler) GetTaskStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Route to appropriate query based on role
+	// Parse filter type parameter (default: today)
+	filterType := r.URL.Query().Get("filter_type")
+	if filterType == "" {
+		filterType = "today"
+	}
+
+	// Route to appropriate query based on role AND filter type
 	var stats interface{}
 	switch user.Role {
 	case "admin":
-		// Admin gets stats for all users in their company
-		stats, err = h.queries.GetTaskStatsByCompany(r.Context(), user.CompanyID)
-		if err != nil {
-			log.Printf("Failed to get admin task stats: %v", err)
-			respondError(w, http.StatusInternalServerError, "Failed to get task stats")
-			return
-		}
-
+		stats, err = h.getTaskStatsForCompany(r, user.CompanyID, filterType)
 	case "manager", "supervisor":
-		// Manager gets stats for their subordinates
-		stats, err = h.queries.GetTaskStatsByManager(r.Context(), db.GetTaskStatsByManagerParams{
-			ReportsTo: sql.NullInt32{Int32: user.ID, Valid: true},
-			CompanyID: user.CompanyID,
-		})
-		if err != nil {
-			log.Printf("Failed to get manager task stats: %v", err)
-			respondError(w, http.StatusInternalServerError, "Failed to get task stats")
-			return
-		}
-
+		stats, err = h.getTaskStatsForManager(r, user.ID, user.CompanyID, filterType)
 	case "support":
-		// Support gets stats filtered by company_id parameter
 		companyIDStr := r.URL.Query().Get("company_id")
 		if companyIDStr == "" {
 			respondError(w, http.StatusBadRequest, "Support role must provide company_id parameter")
 			return
 		}
-
 		companyID, err := strconv.ParseInt(companyIDStr, 10, 32)
 		if err != nil {
 			respondError(w, http.StatusBadRequest, "Invalid company_id parameter")
 			return
 		}
-
-		stats, err = h.queries.GetTaskStatsByCompany(r.Context(), int32(companyID))
-		if err != nil {
-			log.Printf("Failed to get support task stats: %v", err)
-			respondError(w, http.StatusInternalServerError, "Failed to get task stats")
-			return
-		}
-
+		stats, err = h.getTaskStatsForCompany(r, int32(companyID), filterType)
 	case "agent":
 		// Agent gets their own stats (existing query)
 		agentStats, err := h.queries.GetTaskStats(r.Context(), user.ID)
@@ -120,9 +100,14 @@ func (h *StatsHandler) GetTaskStats(w http.ResponseWriter, r *http.Request) {
 			"overdue_tasks":     agentStats.OverdueTasks,
 			"outstanding_tasks": outstandingCount,
 		}
-
 	default:
 		respondError(w, http.StatusForbidden, "Unknown role")
+		return
+	}
+
+	if err != nil {
+		log.Printf("Failed to get task stats: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve task statistics")
 		return
 	}
 
@@ -131,6 +116,121 @@ func (h *StatsHandler) GetTaskStats(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"stats":   stats,
 	})
+}
+
+// Helper to route by filter type for company-level task stats
+func (h *StatsHandler) getTaskStatsForCompany(r *http.Request, companyID int32, filterType string) (interface{}, error) {
+	ctx := r.Context()
+
+	switch filterType {
+	case "today":
+		return h.queries.GetTaskStatsByCompanyToday(ctx, companyID)
+	case "yesterday":
+		return h.queries.GetTaskStatsByCompanyYesterday(ctx, companyID)
+	case "this_week":
+		return h.queries.GetTaskStatsByCompanyThisWeek(ctx, companyID)
+	case "this_month":
+		return h.queries.GetTaskStatsByCompanyThisMonth(ctx, companyID)
+	case "custom":
+		startStr := r.URL.Query().Get("start_date")
+		endStr := r.URL.Query().Get("end_date")
+
+		if startStr == "" || endStr == "" {
+			return nil, fmt.Errorf("custom filter requires start_date and end_date parameters")
+		}
+
+		// Parse ISO 8601 dates (YYYY-MM-DD format)
+		startTime, err := time.Parse("2006-01-02", startStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_date format (use YYYY-MM-DD)")
+		}
+
+		endTime, err := time.Parse("2006-01-02", endStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_date format (use YYYY-MM-DD)")
+		}
+
+		// Validate range logic
+		if startTime.After(endTime) {
+			return nil, fmt.Errorf("start_date must be before or equal to end_date")
+		}
+
+		// Adjust end time to include entire end date (add 1 day)
+		endTime = endTime.AddDate(0, 0, 1)
+
+		return h.queries.GetTaskStatsByCompanyRange(ctx, db.GetTaskStatsByCompanyRangeParams{
+			CompanyID: companyID,
+			CreatedAt: startTime,
+			CreatedAt_2: endTime,
+		})
+	default:
+		return nil, fmt.Errorf("unknown filter type: %s", filterType)
+	}
+}
+
+// Helper to route by filter type for manager-level task stats
+func (h *StatsHandler) getTaskStatsForManager(r *http.Request, managerID, companyID int32, filterType string) (interface{}, error) {
+	ctx := r.Context()
+
+	switch filterType {
+	case "today":
+		return h.queries.GetTaskStatsByManagerToday(ctx, db.GetTaskStatsByManagerTodayParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "yesterday":
+		return h.queries.GetTaskStatsByManagerYesterday(ctx, db.GetTaskStatsByManagerYesterdayParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "this_week":
+		return h.queries.GetTaskStatsByManagerThisWeek(ctx, db.GetTaskStatsByManagerThisWeekParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "this_month":
+		return h.queries.GetTaskStatsByManagerThisMonth(ctx, db.GetTaskStatsByManagerThisMonthParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+		})
+	case "custom":
+		startStr := r.URL.Query().Get("start_date")
+		endStr := r.URL.Query().Get("end_date")
+
+		if startStr == "" || endStr == "" {
+			return nil, fmt.Errorf("custom filter requires start_date and end_date parameters")
+		}
+
+		startTime, err := time.Parse("2006-01-02", startStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_date format (use YYYY-MM-DD)")
+		}
+
+		endTime, err := time.Parse("2006-01-02", endStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_date format (use YYYY-MM-DD)")
+		}
+
+		if startTime.After(endTime) {
+			return nil, fmt.Errorf("start_date must be before or equal to end_date")
+		}
+
+		endTime = endTime.AddDate(0, 0, 1)
+
+		return h.queries.GetTaskStatsByManagerRange(ctx, db.GetTaskStatsByManagerRangeParams{
+			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
+			CompanyID: companyID,
+			CompanyID_2: companyID,
+			CreatedAt: startTime,
+			CreatedAt_2: endTime,
+		})
+	default:
+		return nil, fmt.Errorf("unknown filter type: %s", filterType)
+	}
 }
 
 // GET /api/stats/calls?filter_type=today|yesterday|this_week|this_month|custom&start_date=2026-02-01&end_date=2026-02-07
