@@ -231,9 +231,15 @@ async function fetchStats() {
     });
     const callData = await callResponse.json();
 
+    // Fetch activity stats with filters
+    const activityResponse = await fetch(`${API_URL}/api/stats/activity?${params.toString()}`, {
+      credentials: 'include'
+    });
+    const activityData = await activityResponse.json();
+
     // Update UI with stats
-    if (taskData.success && callData.success) {
-      updateStatsDisplay(taskData.stats, callData.stats);
+    if (taskData.success && callData.success && activityData.success) {
+      updateStatsDisplay(taskData.stats, callData.stats, activityData.stats);
     }
   } catch (error) {
     console.error('Error loading stats:', error);
@@ -246,7 +252,7 @@ let currentCompanyId = null;
 /**
  * Update stats display
  */
-function updateStatsDisplay(taskStats, callStats) {
+function updateStatsDisplay(taskStats, callStats, activityStats) {
   const content = document.getElementById('statsContent');
 
   // Handle different stat structures based on role
@@ -254,9 +260,11 @@ function updateStatsDisplay(taskStats, callStats) {
   const totalTasks = taskStats.total_tasks || 0;
   const answeredCalls = callStats.answered_calls || 0;
   const completedTasks = taskStats.completed_tasks || 0;
+  const hoursOnline = activityStats?.hours_online || 0;
+  const activeCallHours = activityStats?.active_call_hours || 0;
 
   content.innerHTML = `
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
         <h3 class="text-sm font-medium text-gray-500">Total Calls</h3>
         <p class="text-2xl font-bold text-gray-900 mt-2">${totalCalls}</p>
@@ -272,6 +280,14 @@ function updateStatsDisplay(taskStats, callStats) {
       <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
         <h3 class="text-sm font-medium text-gray-500">Completed Tasks</h3>
         <p class="text-2xl font-bold text-blue-600 mt-2">${completedTasks}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500">Hours Online</h3>
+        <p class="text-2xl font-bold text-purple-600 mt-2">${Number(hoursOnline).toFixed(1)}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500">Active Call Time</h3>
+        <p class="text-2xl font-bold text-orange-600 mt-2">${Number(activeCallHours).toFixed(1)} hrs</p>
       </div>
     </div>
   `;
