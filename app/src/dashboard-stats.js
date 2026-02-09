@@ -5,6 +5,13 @@ import { API_URL } from './config.js';
 // Last heartbeat timestamp
 let lastHeartbeatTime = null;
 
+// Time filter state
+let currentFilter = {
+  type: 'today',
+  startDate: null,
+  endDate: null
+};
+
 /**
  * Fetch company by ID
  */
@@ -187,27 +194,54 @@ async function loadCompanies() {
  * Load stats for selected company
  */
 async function loadStatsForCompany(companyId) {
-  const params = companyId ? `?company_id=${companyId}` : '';
+  // Store company ID for use in fetchStats
+  currentCompanyId = companyId;
+  await fetchStats();
+}
 
+/**
+ * Fetch stats with time filter parameters
+ */
+async function fetchStats() {
   try {
-    // Fetch task stats with company filter
-    const taskResponse = await fetch(`${API_URL}/api/stats/tasks${params}`, {
+    // Build query string with filter params
+    const params = new URLSearchParams();
+    params.append('filter_type', currentFilter.type);
+
+    if (currentFilter.type === 'custom') {
+      params.append('start_date', currentFilter.startDate);
+      params.append('end_date', currentFilter.endDate);
+    }
+
+    // Add company_id for support role if needed
+    const user = authService.getCurrentUser();
+    if (user.role === 'support' && currentCompanyId) {
+      params.append('company_id', currentCompanyId);
+    }
+
+    // Fetch task stats with filters
+    const taskResponse = await fetch(`${API_URL}/api/stats/tasks?${params.toString()}`, {
       credentials: 'include'
     });
     const taskData = await taskResponse.json();
 
-    // Fetch call stats with company filter
-    const callResponse = await fetch(`${API_URL}/api/stats/calls${params}`, {
+    // Fetch call stats with filters
+    const callResponse = await fetch(`${API_URL}/api/stats/calls?${params.toString()}`, {
       credentials: 'include'
     });
     const callData = await callResponse.json();
 
     // Update UI with stats
-    updateStatsDisplay(taskData.stats, callData.stats);
+    if (taskData.success && callData.success) {
+      updateStatsDisplay(taskData.stats, callData.stats);
+    }
   } catch (error) {
     console.error('Error loading stats:', error);
   }
 }
+
+// Store current company ID for support role filtering
+let currentCompanyId = null;
 
 /**
  * Update stats display
@@ -244,10 +278,88 @@ function updateStatsDisplay(taskStats, callStats) {
 }
 
 /**
+ * Helper to update active button styling
+ */
+function setActiveFilter(filterType, startDate = null, endDate = null) {
+  currentFilter = { type: filterType, startDate, endDate };
+
+  // Update button styles
+  const buttons = ['filter-today', 'filter-yesterday', 'filter-this-week', 'filter-this-month'];
+  buttons.forEach(btnId => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      if (btnId === `filter-${filterType.replace('_', '-')}`) {
+        // Active state
+        btn.classList.remove('border-gray-300', 'bg-white', 'text-gray-700');
+        btn.classList.add('border-blue-600', 'bg-blue-600', 'text-white');
+      } else {
+        // Inactive state
+        btn.classList.remove('border-blue-600', 'bg-blue-600', 'text-white');
+        btn.classList.add('border-gray-300', 'bg-white', 'text-gray-700');
+      }
+    }
+  });
+}
+
+/**
+ * Setup time filter event listeners
+ */
+function setupTimeFilterListeners() {
+  // Quick filter button handlers
+  document.getElementById('filter-today')?.addEventListener('click', () => {
+    setActiveFilter('today');
+    fetchStats();
+  });
+
+  document.getElementById('filter-yesterday')?.addEventListener('click', () => {
+    setActiveFilter('yesterday');
+    fetchStats();
+  });
+
+  document.getElementById('filter-this-week')?.addEventListener('click', () => {
+    setActiveFilter('this_week');
+    fetchStats();
+  });
+
+  document.getElementById('filter-this-month')?.addEventListener('click', () => {
+    setActiveFilter('this_month');
+    fetchStats();
+  });
+
+  // Custom date range handler
+  document.getElementById('filter-custom')?.addEventListener('click', () => {
+    const startDate = document.getElementById('start-date')?.value;
+    const endDate = document.getElementById('end-date')?.value;
+    const errorEl = document.getElementById('date-error');
+
+    // Validation
+    if (!startDate || !endDate) {
+      errorEl.textContent = 'Please select both start and end dates';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      errorEl.textContent = 'Start date must be before or equal to end date';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    // Valid range
+    errorEl.classList.add('hidden');
+    setActiveFilter('custom', startDate, endDate);
+    fetchStats();
+  });
+}
+
+/**
  * Initialize stats page
  */
 async function initializeStatsPage() {
   console.log('Initializing stats page with SSE connection');
+
+  // Setup time filter listeners
+  setupTimeFilterListeners();
 
   // Check user role and show company filter for support
   const user = authService.getCurrentUser();
@@ -260,7 +372,7 @@ async function initializeStatsPage() {
     await loadCompanies();
   } else {
     // For other roles, load stats immediately
-    await loadStatsForCompany('');
+    await fetchStats();
   }
 
   // Setup SSE listeners
