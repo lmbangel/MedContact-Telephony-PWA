@@ -593,6 +593,157 @@ func (q *Queries) GetCallStatsByCompany(ctx context.Context, companyID int32) (G
 	return i, err
 }
 
+const getCallStatsByCompanyRange = `-- name: GetCallStatsByCompanyRange :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND created_at >= ? AND created_at < ?
+`
+
+type GetCallStatsByCompanyRangeParams struct {
+	CompanyID   int32        `json:"company_id"`
+	CreatedAt   sql.NullTime `json:"created_at"`
+	CreatedAt_2 sql.NullTime `json:"created_at_2"`
+}
+
+type GetCallStatsByCompanyRangeRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByCompanyRange(ctx context.Context, arg GetCallStatsByCompanyRangeParams) (GetCallStatsByCompanyRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByCompanyRange, arg.CompanyID, arg.CreatedAt, arg.CreatedAt_2)
+	var i GetCallStatsByCompanyRangeRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByCompanyThisMonth = `-- name: GetCallStatsByCompanyThisMonth :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+`
+
+type GetCallStatsByCompanyThisMonthRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByCompanyThisMonth(ctx context.Context, companyID int32) (GetCallStatsByCompanyThisMonthRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByCompanyThisMonth, companyID)
+	var i GetCallStatsByCompanyThisMonthRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByCompanyThisWeek = `-- name: GetCallStatsByCompanyThisWeek :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+`
+
+type GetCallStatsByCompanyThisWeekRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByCompanyThisWeek(ctx context.Context, companyID int32) (GetCallStatsByCompanyThisWeekRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByCompanyThisWeek, companyID)
+	var i GetCallStatsByCompanyThisWeekRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByCompanyToday = `-- name: GetCallStatsByCompanyToday :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND DATE(created_at) = CURDATE()
+`
+
+type GetCallStatsByCompanyTodayRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByCompanyToday(ctx context.Context, companyID int32) (GetCallStatsByCompanyTodayRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByCompanyToday, companyID)
+	var i GetCallStatsByCompanyTodayRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByCompanyYesterday = `-- name: GetCallStatsByCompanyYesterday :one
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE company_id = ? AND DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+`
+
+type GetCallStatsByCompanyYesterdayRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByCompanyYesterday(ctx context.Context, companyID int32) (GetCallStatsByCompanyYesterdayRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByCompanyYesterday, companyID)
+	var i GetCallStatsByCompanyYesterdayRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
 const getCallStatsByManager = `-- name: GetCallStatsByManager :one
 WITH RECURSIVE subordinates AS (
     SELECT u.id FROM users u
@@ -626,6 +777,214 @@ type GetCallStatsByManagerRow struct {
 func (q *Queries) GetCallStatsByManager(ctx context.Context, arg GetCallStatsByManagerParams) (GetCallStatsByManagerRow, error) {
 	row := q.db.QueryRowContext(ctx, getCallStatsByManager, arg.ReportsTo, arg.CompanyID)
 	var i GetCallStatsByManagerRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByManagerRange = `-- name: GetCallStatsByManagerRange :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND transcriptions.created_at >= ? AND transcriptions.created_at < ?
+`
+
+type GetCallStatsByManagerRangeParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+	CreatedAt   sql.NullTime  `json:"created_at"`
+	CreatedAt_2 sql.NullTime  `json:"created_at_2"`
+}
+
+type GetCallStatsByManagerRangeRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByManagerRange(ctx context.Context, arg GetCallStatsByManagerRangeParams) (GetCallStatsByManagerRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByManagerRange,
+		arg.ReportsTo,
+		arg.CompanyID,
+		arg.CompanyID_2,
+		arg.CreatedAt,
+		arg.CreatedAt_2,
+	)
+	var i GetCallStatsByManagerRangeRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByManagerThisMonth = `-- name: GetCallStatsByManagerThisMonth :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+`
+
+type GetCallStatsByManagerThisMonthParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetCallStatsByManagerThisMonthRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByManagerThisMonth(ctx context.Context, arg GetCallStatsByManagerThisMonthParams) (GetCallStatsByManagerThisMonthRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByManagerThisMonth, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetCallStatsByManagerThisMonthRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByManagerThisWeek = `-- name: GetCallStatsByManagerThisWeek :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+`
+
+type GetCallStatsByManagerThisWeekParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetCallStatsByManagerThisWeekRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByManagerThisWeek(ctx context.Context, arg GetCallStatsByManagerThisWeekParams) (GetCallStatsByManagerThisWeekRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByManagerThisWeek, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetCallStatsByManagerThisWeekRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByManagerToday = `-- name: GetCallStatsByManagerToday :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND DATE(created_at) = CURDATE()
+`
+
+type GetCallStatsByManagerTodayParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetCallStatsByManagerTodayRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByManagerToday(ctx context.Context, arg GetCallStatsByManagerTodayParams) (GetCallStatsByManagerTodayRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByManagerToday, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetCallStatsByManagerTodayRow
+	err := row.Scan(
+		&i.TotalCalls,
+		&i.AnsweredCalls,
+		&i.MissedCalls,
+		&i.AvgDuration,
+	)
+	return i, err
+}
+
+const getCallStatsByManagerYesterday = `-- name: GetCallStatsByManagerYesterday :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
+FROM transcriptions
+WHERE agent_id IN (SELECT id FROM subordinates) AND DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+`
+
+type GetCallStatsByManagerYesterdayParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetCallStatsByManagerYesterdayRow struct {
+	TotalCalls    int64       `json:"total_calls"`
+	AnsweredCalls int64       `json:"answered_calls"`
+	MissedCalls   int64       `json:"missed_calls"`
+	AvgDuration   interface{} `json:"avg_duration"`
+}
+
+func (q *Queries) GetCallStatsByManagerYesterday(ctx context.Context, arg GetCallStatsByManagerYesterdayParams) (GetCallStatsByManagerYesterdayRow, error) {
+	row := q.db.QueryRowContext(ctx, getCallStatsByManagerYesterday, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetCallStatsByManagerYesterdayRow
 	err := row.Scan(
 		&i.TotalCalls,
 		&i.AnsweredCalls,
@@ -1370,6 +1729,207 @@ func (q *Queries) GetTaskStatsByCompany(ctx context.Context, companyID int32) (G
 	return i, err
 }
 
+const getTaskStatsByCompanyRange = `-- name: GetTaskStatsByCompanyRange :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ? AND t.created_at >= ? AND t.created_at < ?
+`
+
+type GetTaskStatsByCompanyRangeParams struct {
+	CompanyID   int32        `json:"company_id"`
+	CreatedAt   sql.NullTime `json:"created_at"`
+	CreatedAt_2 sql.NullTime `json:"created_at_2"`
+}
+
+type GetTaskStatsByCompanyRangeRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByCompanyRange(ctx context.Context, arg GetTaskStatsByCompanyRangeParams) (GetTaskStatsByCompanyRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByCompanyRange, arg.CompanyID, arg.CreatedAt, arg.CreatedAt_2)
+	var i GetTaskStatsByCompanyRangeRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByCompanyThisMonth = `-- name: GetTaskStatsByCompanyThisMonth :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ? AND YEAR(t.created_at) = YEAR(CURDATE()) AND MONTH(t.created_at) = MONTH(CURDATE())
+`
+
+type GetTaskStatsByCompanyThisMonthRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByCompanyThisMonth(ctx context.Context, companyID int32) (GetTaskStatsByCompanyThisMonthRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByCompanyThisMonth, companyID)
+	var i GetTaskStatsByCompanyThisMonthRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByCompanyThisWeek = `-- name: GetTaskStatsByCompanyThisWeek :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ? AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+`
+
+type GetTaskStatsByCompanyThisWeekRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByCompanyThisWeek(ctx context.Context, companyID int32) (GetTaskStatsByCompanyThisWeekRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByCompanyThisWeek, companyID)
+	var i GetTaskStatsByCompanyThisWeekRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByCompanyToday = `-- name: GetTaskStatsByCompanyToday :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ? AND DATE(t.created_at) = CURDATE()
+`
+
+type GetTaskStatsByCompanyTodayRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByCompanyToday(ctx context.Context, companyID int32) (GetTaskStatsByCompanyTodayRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByCompanyToday, companyID)
+	var i GetTaskStatsByCompanyTodayRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByCompanyYesterday = `-- name: GetTaskStatsByCompanyYesterday :one
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+JOIN users u ON t.assigned_to = u.id
+WHERE u.company_id = ? AND DATE(t.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+`
+
+type GetTaskStatsByCompanyYesterdayRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByCompanyYesterday(ctx context.Context, companyID int32) (GetTaskStatsByCompanyYesterdayRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByCompanyYesterday, companyID)
+	var i GetTaskStatsByCompanyYesterdayRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
 const getTaskStatsByManager = `-- name: GetTaskStatsByManager :one
 WITH RECURSIVE subordinates AS (
     SELECT u.id FROM users u
@@ -1409,6 +1969,259 @@ type GetTaskStatsByManagerRow struct {
 func (q *Queries) GetTaskStatsByManager(ctx context.Context, arg GetTaskStatsByManagerParams) (GetTaskStatsByManagerRow, error) {
 	row := q.db.QueryRowContext(ctx, getTaskStatsByManager, arg.ReportsTo, arg.CompanyID)
 	var i GetTaskStatsByManagerRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByManagerRange = `-- name: GetTaskStatsByManagerRange :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates) AND t.created_at >= ? AND t.created_at < ?
+`
+
+type GetTaskStatsByManagerRangeParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+	CreatedAt   sql.NullTime  `json:"created_at"`
+	CreatedAt_2 sql.NullTime  `json:"created_at_2"`
+}
+
+type GetTaskStatsByManagerRangeRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByManagerRange(ctx context.Context, arg GetTaskStatsByManagerRangeParams) (GetTaskStatsByManagerRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByManagerRange,
+		arg.ReportsTo,
+		arg.CompanyID,
+		arg.CompanyID_2,
+		arg.CreatedAt,
+		arg.CreatedAt_2,
+	)
+	var i GetTaskStatsByManagerRangeRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByManagerThisMonth = `-- name: GetTaskStatsByManagerThisMonth :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates) AND YEAR(t.created_at) = YEAR(CURDATE()) AND MONTH(t.created_at) = MONTH(CURDATE())
+`
+
+type GetTaskStatsByManagerThisMonthParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetTaskStatsByManagerThisMonthRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByManagerThisMonth(ctx context.Context, arg GetTaskStatsByManagerThisMonthParams) (GetTaskStatsByManagerThisMonthRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByManagerThisMonth, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetTaskStatsByManagerThisMonthRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByManagerThisWeek = `-- name: GetTaskStatsByManagerThisWeek :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates) AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+`
+
+type GetTaskStatsByManagerThisWeekParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetTaskStatsByManagerThisWeekRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByManagerThisWeek(ctx context.Context, arg GetTaskStatsByManagerThisWeekParams) (GetTaskStatsByManagerThisWeekRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByManagerThisWeek, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetTaskStatsByManagerThisWeekRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByManagerToday = `-- name: GetTaskStatsByManagerToday :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates) AND DATE(t.created_at) = CURDATE()
+`
+
+type GetTaskStatsByManagerTodayParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetTaskStatsByManagerTodayRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByManagerToday(ctx context.Context, arg GetTaskStatsByManagerTodayParams) (GetTaskStatsByManagerTodayRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByManagerToday, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetTaskStatsByManagerTodayRow
+	err := row.Scan(
+		&i.TotalTasks,
+		&i.PendingTasks,
+		&i.InProgressTasks,
+		&i.CompletedTasks,
+		&i.FollowUpTasks,
+		&i.CallbackTasks,
+		&i.OverdueTasks,
+	)
+	return i, err
+}
+
+const getTaskStatsByManagerYesterday = `-- name: GetTaskStatsByManagerYesterday :one
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN type = 'follow-up' THEN 1 END) as follow_up_tasks,
+    COUNT(CASE WHEN type = 'callback' THEN 1 END) as callback_tasks,
+    COUNT(CASE WHEN status != 'completed' AND due_date IS NOT NULL AND due_date < NOW() THEN 1 END) as overdue_tasks
+FROM tasks t
+WHERE t.assigned_to IN (SELECT id FROM subordinates) AND DATE(t.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+`
+
+type GetTaskStatsByManagerYesterdayParams struct {
+	ReportsTo   sql.NullInt32 `json:"reports_to"`
+	CompanyID   int32         `json:"company_id"`
+	CompanyID_2 int32         `json:"company_id_2"`
+}
+
+type GetTaskStatsByManagerYesterdayRow struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	PendingTasks    int64 `json:"pending_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	FollowUpTasks   int64 `json:"follow_up_tasks"`
+	CallbackTasks   int64 `json:"callback_tasks"`
+	OverdueTasks    int64 `json:"overdue_tasks"`
+}
+
+func (q *Queries) GetTaskStatsByManagerYesterday(ctx context.Context, arg GetTaskStatsByManagerYesterdayParams) (GetTaskStatsByManagerYesterdayRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatsByManagerYesterday, arg.ReportsTo, arg.CompanyID, arg.CompanyID_2)
+	var i GetTaskStatsByManagerYesterdayRow
 	err := row.Scan(
 		&i.TotalTasks,
 		&i.PendingTasks,
