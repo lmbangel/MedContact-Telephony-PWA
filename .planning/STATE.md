@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 3 of 6 (Core Metrics & Time Filtering)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-08 — Completed Phase 2
+Plan: 1 of TBD in current phase
+Status: In progress
+Last activity: 2026-02-09 — Completed 03-01-PLAN.md
 
-Progress: [████████░░] 33%
+Progress: [████████░░] 35%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 4.0 minutes
-- Total execution time: 0.40 hours
+- Total plans completed: 7
+- Average duration: 5.3 minutes
+- Total execution time: 0.62 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [████████░░] 33%
 |-------|-------|-------|----------|
 | 01-sse-infrastructure-navigation | 3 | 9.4 min | 3.1 min |
 | 02-role-based-data-layer | 3 | 12.2 min | 4.1 min |
+| 03-core-metrics-time-filtering | 1 | 15.0 min | 15.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (3.0m), 01-03 (3.0m), 02-01 (3.4m), 02-02 (5.4m), 02-03 (1.0m)
-- Trend: Stable velocity
+- Last 5 plans: 01-03 (3.0m), 02-01 (3.4m), 02-02 (5.4m), 02-03 (1.0m), 03-01 (15.0m)
+- Trend: 03-01 longer due to sqlc compatibility debugging
 
 *Updated after each plan completion*
 
@@ -55,6 +56,8 @@ Recent decisions affecting current work:
 - Role-based handler routing: API handlers switch on user.Role to call appropriate query (02-02)
 - Support requires company_id: Support role must provide company_id parameter (02-02)
 - Per-agent breakdown deferred to Phase 4: ROLE-05 agent filter UI bundled with DISP-02 per-agent table (02-03)
+- Date arithmetic over YEARWEEK: sqlc MySQL parser incompatibility requires date math for week filtering (03-01)
+- Separate query per time filter: Static queries (not dynamic SQL) for sqlc compatibility and query plan optimization (03-01)
 
 ### Pending Todos
 
@@ -71,6 +74,6 @@ Research identified critical pitfalls to address:
 
 ## Session Continuity
 
-Last session: 2026-02-08
-Stopped at: Completed Phase 2 - Role-Based Data Layer
+Last session: 2026-02-09
+Stopped at: Completed 03-01-PLAN.md - Database Indexes & Time-Filtered Queries
 Resume file: None
