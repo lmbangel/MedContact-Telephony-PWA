@@ -452,6 +452,105 @@ func (h *StatsHandler) getCallStatsForManager(r *http.Request, managerID, compan
 	}
 }
 
+// GET /api/stats/activity?filter_type=today|yesterday|this_week|this_month|custom&start_date=2026-02-01&end_date=2026-02-07
+func (h *StatsHandler) GetActivityStats(w http.ResponseWriter, r *http.Request) {
+	// Extract authenticated user from session cookie
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	session, err := h.queries.GetSession(r.Context(), cookie.Value)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	// Check if session is expired
+	if time.Now().After(session.ExpiresAt) {
+		h.queries.DeleteSession(r.Context(), session.ID)
+		respondError(w, http.StatusUnauthorized, "Session expired")
+		return
+	}
+
+	user, err := h.queries.GetUserByID(r.Context(), session.UserID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	// Parse filter type parameter (default: today)
+	filterType := r.URL.Query().Get("filter_type")
+	if filterType == "" {
+		filterType = "today"
+	}
+
+	// Activity stats are per-user only (all roles see their own activity)
+	stats, err := h.getActivityStatsForAgent(r, user.ID, filterType)
+	if err != nil {
+		log.Printf("Failed to get activity stats: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve activity statistics")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"stats":   stats,
+	})
+}
+
+// Helper to route by filter type for agent-level activity stats
+func (h *StatsHandler) getActivityStatsForAgent(r *http.Request, userID int32, filterType string) (interface{}, error) {
+	ctx := r.Context()
+
+	switch filterType {
+	case "today":
+		return h.queries.GetActivityStatsByAgentToday(ctx, userID)
+	case "yesterday":
+		return h.queries.GetActivityStatsByAgentYesterday(ctx, userID)
+	case "this_week":
+		return h.queries.GetActivityStatsByAgentThisWeek(ctx, userID)
+	case "this_month":
+		return h.queries.GetActivityStatsByAgentThisMonth(ctx, userID)
+	case "custom":
+		startStr := r.URL.Query().Get("start_date")
+		endStr := r.URL.Query().Get("end_date")
+
+		if startStr == "" || endStr == "" {
+			return nil, fmt.Errorf("custom filter requires start_date and end_date parameters")
+		}
+
+		// Parse ISO 8601 dates (YYYY-MM-DD format)
+		startTime, err := time.Parse("2006-01-02", startStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_date format (use YYYY-MM-DD)")
+		}
+
+		endTime, err := time.Parse("2006-01-02", endStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_date format (use YYYY-MM-DD)")
+		}
+
+		// Validate range logic
+		if startTime.After(endTime) {
+			return nil, fmt.Errorf("start_date must be before or equal to end_date")
+		}
+
+		// Adjust end time to include entire end date (add 1 day)
+		endTime = endTime.AddDate(0, 0, 1)
+
+		return h.queries.GetActivityStatsByAgentRange(ctx, db.GetActivityStatsByAgentRangeParams{
+			UserID: userID,
+			CreatedAt: sql.NullTime{Time: startTime, Valid: true},
+			CreatedAt_2: sql.NullTime{Time: endTime, Valid: true},
+		})
+	default:
+		return nil, fmt.Errorf("unknown filter type: %s", filterType)
+	}
+}
+
 func respondError(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)

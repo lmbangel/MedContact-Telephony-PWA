@@ -326,6 +326,7 @@ func main() {
 		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support", "agent"))
 		r.Get("/tasks", statsHandler.GetTaskStats)
 		r.Get("/calls", statsHandler.GetCallStats)
+		r.Get("/activity", statsHandler.GetActivityStats)
 	})
 
 	port := os.Getenv("PORT")
