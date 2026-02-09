@@ -691,3 +691,127 @@ SELECT
     COALESCE(AVG(CASE WHEN duration > 0 THEN duration END), 0) as avg_duration
 FROM transcriptions
 WHERE agent_id IN (SELECT id FROM subordinates) AND transcriptions.created_at >= ? AND transcriptions.created_at < ?;
+
+-- -----------------------
+-- Activity Metrics Queries
+-- -----------------------
+
+-- name: GetActivityStatsByAgentToday :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND DATE(created_at) = CURDATE()
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks;
+
+-- name: GetActivityStatsByAgentYesterday :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks;
+
+-- name: GetActivityStatsByAgentThisWeek :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks;
+
+-- name: GetActivityStatsByAgentThisMonth :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks;
+
+-- name: GetActivityStatsByAgentRange :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND created_at >= ? AND created_at < ?
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks;

@@ -311,6 +311,201 @@ func (q *Queries) GetActiveUsersByCompany(ctx context.Context, companyID int32) 
 	return items, nil
 }
 
+const getActivityStatsByAgentRange = `-- name: GetActivityStatsByAgentRange :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND created_at >= ? AND created_at < ?
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks
+`
+
+type GetActivityStatsByAgentRangeParams struct {
+	UserID      int32        `json:"user_id"`
+	CreatedAt   sql.NullTime `json:"created_at"`
+	CreatedAt_2 sql.NullTime `json:"created_at_2"`
+}
+
+type GetActivityStatsByAgentRangeRow struct {
+	HoursOnline     interface{} `json:"hours_online"`
+	ActiveCallHours interface{} `json:"active_call_hours"`
+}
+
+func (q *Queries) GetActivityStatsByAgentRange(ctx context.Context, arg GetActivityStatsByAgentRangeParams) (GetActivityStatsByAgentRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, getActivityStatsByAgentRange, arg.UserID, arg.CreatedAt, arg.CreatedAt_2)
+	var i GetActivityStatsByAgentRangeRow
+	err := row.Scan(&i.HoursOnline, &i.ActiveCallHours)
+	return i, err
+}
+
+const getActivityStatsByAgentThisMonth = `-- name: GetActivityStatsByAgentThisMonth :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks
+`
+
+type GetActivityStatsByAgentThisMonthRow struct {
+	HoursOnline     interface{} `json:"hours_online"`
+	ActiveCallHours interface{} `json:"active_call_hours"`
+}
+
+func (q *Queries) GetActivityStatsByAgentThisMonth(ctx context.Context, userID int32) (GetActivityStatsByAgentThisMonthRow, error) {
+	row := q.db.QueryRowContext(ctx, getActivityStatsByAgentThisMonth, userID)
+	var i GetActivityStatsByAgentThisMonthRow
+	err := row.Scan(&i.HoursOnline, &i.ActiveCallHours)
+	return i, err
+}
+
+const getActivityStatsByAgentThisWeek = `-- name: GetActivityStatsByAgentThisWeek :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks
+`
+
+type GetActivityStatsByAgentThisWeekRow struct {
+	HoursOnline     interface{} `json:"hours_online"`
+	ActiveCallHours interface{} `json:"active_call_hours"`
+}
+
+func (q *Queries) GetActivityStatsByAgentThisWeek(ctx context.Context, userID int32) (GetActivityStatsByAgentThisWeekRow, error) {
+	row := q.db.QueryRowContext(ctx, getActivityStatsByAgentThisWeek, userID)
+	var i GetActivityStatsByAgentThisWeekRow
+	err := row.Scan(&i.HoursOnline, &i.ActiveCallHours)
+	return i, err
+}
+
+const getActivityStatsByAgentToday = `-- name: GetActivityStatsByAgentToday :one
+
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND DATE(created_at) = CURDATE()
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks
+`
+
+type GetActivityStatsByAgentTodayRow struct {
+	HoursOnline     interface{} `json:"hours_online"`
+	ActiveCallHours interface{} `json:"active_call_hours"`
+}
+
+// -----------------------
+// Activity Metrics Queries
+// -----------------------
+func (q *Queries) GetActivityStatsByAgentToday(ctx context.Context, userID int32) (GetActivityStatsByAgentTodayRow, error) {
+	row := q.db.QueryRowContext(ctx, getActivityStatsByAgentToday, userID)
+	var i GetActivityStatsByAgentTodayRow
+	err := row.Scan(&i.HoursOnline, &i.ActiveCallHours)
+	return i, err
+}
+
+const getActivityStatsByAgentYesterday = `-- name: GetActivityStatsByAgentYesterday :one
+WITH status_events AS (
+    SELECT
+        user_id,
+        status,
+        created_at,
+        LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) as prev_event_time
+    FROM agent_status
+    WHERE user_id = ? AND DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+),
+time_blocks AS (
+    SELECT
+        user_id,
+        status,
+        TIMESTAMPDIFF(SECOND, prev_event_time, created_at) as duration_seconds
+    FROM status_events
+    WHERE prev_event_time IS NOT NULL
+        AND status IN ('available', 'on-call', 'after-call-work')
+)
+SELECT
+    COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
+    COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
+FROM time_blocks
+`
+
+type GetActivityStatsByAgentYesterdayRow struct {
+	HoursOnline     interface{} `json:"hours_online"`
+	ActiveCallHours interface{} `json:"active_call_hours"`
+}
+
+func (q *Queries) GetActivityStatsByAgentYesterday(ctx context.Context, userID int32) (GetActivityStatsByAgentYesterdayRow, error) {
+	row := q.db.QueryRowContext(ctx, getActivityStatsByAgentYesterday, userID)
+	var i GetActivityStatsByAgentYesterdayRow
+	err := row.Scan(&i.HoursOnline, &i.ActiveCallHours)
+	return i, err
+}
+
 const getAgentCallHistory = `-- name: GetAgentCallHistory :many
 SELECT id, customer_id, agent_id, company_id, call_sid, recording_sid, recording_url, recording_duration, recording_status, recording_channels, recording_start_time, transcript, summary, from_number, to_number, call_status, duration, call_reason, transcription_text, created_at FROM transcriptions
 WHERE agent_id = ?
