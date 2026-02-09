@@ -160,8 +160,8 @@ func (h *StatsHandler) getTaskStatsForCompany(r *http.Request, companyID int32, 
 
 		return h.queries.GetTaskStatsByCompanyRange(ctx, db.GetTaskStatsByCompanyRangeParams{
 			CompanyID: companyID,
-			CreatedAt: startTime,
-			CreatedAt_2: endTime,
+			CreatedAt: sql.NullTime{Time: startTime, Valid: true},
+			CreatedAt_2: sql.NullTime{Time: endTime, Valid: true},
 		})
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)
@@ -225,8 +225,8 @@ func (h *StatsHandler) getTaskStatsForManager(r *http.Request, managerID, compan
 			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
 			CompanyID: companyID,
 			CompanyID_2: companyID,
-			CreatedAt: startTime,
-			CreatedAt_2: endTime,
+			CreatedAt: sql.NullTime{Time: startTime, Valid: true},
+			CreatedAt_2: sql.NullTime{Time: endTime, Valid: true},
 		})
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)
@@ -379,8 +379,8 @@ func (h *StatsHandler) getCallStatsForCompany(r *http.Request, companyID int32, 
 
 		return h.queries.GetCallStatsByCompanyRange(ctx, db.GetCallStatsByCompanyRangeParams{
 			CompanyID: companyID,
-			CreatedAt: startTime,
-			CreatedAt_2: endTime,
+			CreatedAt: sql.NullTime{Time: startTime, Valid: true},
+			CreatedAt_2: sql.NullTime{Time: endTime, Valid: true},
 		})
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)
@@ -444,8 +444,8 @@ func (h *StatsHandler) getCallStatsForManager(r *http.Request, managerID, compan
 			ReportsTo: sql.NullInt32{Int32: managerID, Valid: true},
 			CompanyID: companyID,
 			CompanyID_2: companyID,
-			CreatedAt: startTime,
-			CreatedAt_2: endTime,
+			CreatedAt: sql.NullTime{Time: startTime, Valid: true},
+			CreatedAt_2: sql.NullTime{Time: endTime, Valid: true},
 		})
 	default:
 		return nil, fmt.Errorf("unknown filter type: %s", filterType)
