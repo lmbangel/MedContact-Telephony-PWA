@@ -178,6 +178,60 @@
           </select>
         </div>
 
+        <!-- Time Filter Controls -->
+        <div class="mb-6 bg-white rounded-lg shadow p-4">
+          <h3 class="text-lg font-semibold mb-3">Time Period</h3>
+
+          <!-- Quick Filter Buttons -->
+          <div class="flex flex-wrap gap-2 mb-4">
+            <button id="filter-today" class="px-4 py-2 rounded-lg border-2 border-blue-600 bg-blue-600 text-white font-medium hover:bg-blue-700 transition">
+              Today
+            </button>
+            <button id="filter-yesterday" class="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 transition">
+              Yesterday
+            </button>
+            <button id="filter-this-week" class="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 transition">
+              This Week
+            </button>
+            <button id="filter-this-month" class="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 transition">
+              This Month
+            </button>
+          </div>
+
+          <!-- Custom Date Range -->
+          <div class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[200px]">
+              <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                id="start-date"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div class="flex-1 min-w-[200px]">
+              <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                id="end-date"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <button
+              id="filter-custom"
+              class="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Apply Range
+            </button>
+          </div>
+
+          <!-- Validation Error Message -->
+          <div id="date-error" class="mt-2 text-red-600 text-sm hidden"></div>
+        </div>
+
         <!-- Stats content -->
         <div id="statsContent">
           <p class="text-gray-500">Real-time stats will appear here once implemented in Phase 4.</p>
