@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: SSE Infrastructure & Navigation** - Real-time foundation with connection management
 - [x] **Phase 2: Role-Based Data Layer** - Security-critical SQL aggregation with role filtering
-- [ ] **Phase 3: Core Metrics & Time Filtering** - Stats aggregation for calls, tasks, outcomes, activity
+- [x] **Phase 3: Core Metrics & Time Filtering** - Stats aggregation for calls, tasks, outcomes, activity
 - [ ] **Phase 4: Dashboard UI & Summary Cards** - Basic stats page with key metrics display
 - [ ] **Phase 5: Chart Visualization** - Trend charts with incremental updates
 - [ ] **Phase 6: Export & Polish** - CSV export and final enhancements
@@ -69,12 +69,13 @@ Plans:
   6. User can select custom date range
   7. Stats update when time filter changes
   8. Queries complete in under 1 second with 10k+ records
-**Plans**: 3 plans
+**Plans**: 4 plans (3 original + 1 gap closure)
 
 Plans:
-- [ ] 03-01-PLAN.md — Database indexes and time-filtered call/task queries
-- [ ] 03-02-PLAN.md — Activity tracking queries and handler time routing
-- [ ] 03-03-PLAN.md — Time filter UI with quick buttons and custom range picker
+- [x] 03-01-PLAN.md — Database indexes and time-filtered call/task queries
+- [x] 03-02-PLAN.md — Activity tracking queries and handler time routing
+- [x] 03-03-PLAN.md — Time filter UI with quick buttons and custom range picker
+- [x] 03-04-PLAN.md — Activity stats handler and frontend integration (gap closure)
 
 ### Phase 4: Dashboard UI & Summary Cards
 **Goal**: Stats page displays key metrics in summary cards with role-appropriate filtering
@@ -132,7 +133,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. SSE Infrastructure & Navigation | 3/3 | Complete | 2026-02-06 |
 | 2. Role-Based Data Layer | 3/3 | Complete | 2026-02-08 |
-| 3. Core Metrics & Time Filtering | 0/3 | Ready to execute | - |
+| 3. Core Metrics & Time Filtering | 4/4 | Complete | 2026-02-09 |
 | 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
 | 5. Chart Visualization | 0/TBD | Not started | - |
 | 6. Export & Polish | 0/TBD | Not started | - |
