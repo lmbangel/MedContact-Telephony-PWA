@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: SSE Infrastructure & Navigation** - Real-time foundation with connection management
 - [x] **Phase 2: Role-Based Data Layer** - Security-critical SQL aggregation with role filtering
 - [x] **Phase 3: Core Metrics & Time Filtering** - Stats aggregation for calls, tasks, outcomes, activity
-- [ ] **Phase 4: Dashboard UI & Summary Cards** - Basic stats page with key metrics display
+- [x] **Phase 4: Dashboard UI & Summary Cards** - Basic stats page with key metrics display
 - [ ] **Phase 5: Chart Visualization** - Trend charts with incremental updates
 - [ ] **Phase 6: Export & Polish** - CSV export and final enhancements
 
@@ -92,8 +92,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Per-agent breakdown API endpoint with role-based filtering
-- [ ] 04-02-PLAN.md — Dashboard UI with loading states and sortable agent table
+- [x] 04-01-PLAN.md — Per-agent breakdown API endpoint with role-based filtering
+- [x] 04-02-PLAN.md — Dashboard UI with loading states and sortable agent table
 
 ### Phase 5: Chart Visualization
 **Goal**: Trend charts display metrics over time with real-time updates
@@ -135,6 +135,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. SSE Infrastructure & Navigation | 3/3 | Complete | 2026-02-06 |
 | 2. Role-Based Data Layer | 3/3 | Complete | 2026-02-08 |
 | 3. Core Metrics & Time Filtering | 4/4 | Complete | 2026-02-09 |
-| 4. Dashboard UI & Summary Cards | 0/TBD | Not started | - |
+| 4. Dashboard UI & Summary Cards | 2/2 | Complete | 2026-02-10 |
 | 5. Chart Visualization | 0/TBD | Not started | - |
 | 6. Export & Polish | 0/TBD | Not started | - |
