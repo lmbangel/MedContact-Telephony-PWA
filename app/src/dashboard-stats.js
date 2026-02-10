@@ -12,6 +12,9 @@ let currentFilter = {
   endDate: null
 };
 
+// Prevent concurrent fetches
+let isFetching = false;
+
 /**
  * Fetch company by ID
  */
@@ -203,6 +206,14 @@ async function loadStatsForCompany(companyId) {
  * Fetch stats with time filter parameters
  */
 async function fetchStats() {
+  if (isFetching) return;
+  isFetching = true;
+
+  // Show loading, hide cards and table
+  document.getElementById('statsLoading')?.classList.remove('hidden');
+  document.getElementById('statsCards')?.classList.add('hidden');
+  document.getElementById('agentBreakdownContainer')?.classList.add('hidden');
+
   try {
     // Build query string with filter params
     const params = new URLSearchParams();
@@ -219,30 +230,44 @@ async function fetchStats() {
       params.append('company_id', currentCompanyId);
     }
 
-    // Fetch task stats with filters
-    const taskResponse = await fetch(`${API_URL}/api/stats/tasks?${params.toString()}`, {
-      credentials: 'include'
-    });
-    const taskData = await taskResponse.json();
+    // Fetch all 4 endpoints in parallel
+    const [taskRes, callRes, activityRes, agentsRes] = await Promise.all([
+      fetch(`${API_URL}/api/stats/tasks?${params.toString()}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/calls?${params.toString()}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/activity?${params.toString()}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/agents?${params.toString()}`, { credentials: 'include' })
+    ]);
 
-    // Fetch call stats with filters
-    const callResponse = await fetch(`${API_URL}/api/stats/calls?${params.toString()}`, {
-      credentials: 'include'
-    });
-    const callData = await callResponse.json();
-
-    // Fetch activity stats with filters
-    const activityResponse = await fetch(`${API_URL}/api/stats/activity?${params.toString()}`, {
-      credentials: 'include'
-    });
-    const activityData = await activityResponse.json();
+    const [taskData, callData, activityData, agentsData] = await Promise.all([
+      taskRes.json(),
+      callRes.json(),
+      activityRes.json(),
+      agentsRes.json()
+    ]);
 
     // Update UI with stats
     if (taskData.success && callData.success && activityData.success) {
       updateStatsDisplay(taskData.stats, callData.stats, activityData.stats);
+
+      // Hide loading, show cards
+      document.getElementById('statsLoading')?.classList.add('hidden');
+      document.getElementById('statsCards')?.classList.remove('hidden');
+
+      // Render agent table if data available and user not agent role
+      if (agentsData.success && agentsData.agents && agentsData.agents.length > 0) {
+        renderAgentTable(agentsData.agents);
+        document.getElementById('agentBreakdownContainer')?.classList.remove('hidden');
+      }
+    } else {
+      showError('Failed to load stats');
+      document.getElementById('statsLoading')?.classList.add('hidden');
     }
   } catch (error) {
     console.error('Error loading stats:', error);
+    showError('Network error loading stats');
+    document.getElementById('statsLoading')?.classList.add('hidden');
+  } finally {
+    isFetching = false;
   }
 }
 
@@ -291,6 +316,134 @@ function updateStatsDisplay(taskStats, callStats, activityStats) {
       </div>
     </div>
   `;
+}
+
+/**
+ * Agent table data and sort state
+ */
+let agentTableData = [];
+let currentSort = { column: 'total_calls', direction: 'desc' };
+
+/**
+ * Render agent breakdown table
+ */
+function renderAgentTable(agents) {
+  agentTableData = agents;
+  const tbody = document.getElementById('agentTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = agents
+    .map(agent => {
+      // Build agent name from firstname and lastname
+      const agentName = `${agent.firstname} ${agent.lastname}`;
+      return `
+      <tr class="border-b border-gray-200 hover:bg-gray-50 transition">
+        <td class="px-4 py-3 text-sm text-gray-900">${agentName}</td>
+        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${agent.total_calls}</td>
+        <td class="px-4 py-3 text-right text-sm text-green-600">${agent.answered_calls}</td>
+        <td class="px-4 py-3 text-right text-sm text-gray-600">${formatDuration(agent.avg_duration)}</td>
+        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${agent.total_tasks}</td>
+        <td class="px-4 py-3 text-right text-sm text-blue-600">${agent.completed_tasks}</td>
+      </tr>
+    `;
+    })
+    .join('');
+
+  updateSortIndicators();
+}
+
+/**
+ * Format duration from seconds to MM:SS
+ */
+function formatDuration(seconds) {
+  if (!seconds || seconds === 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Initialize table sorting event listeners
+ */
+function initTableSorting() {
+  const table = document.getElementById('agentBreakdownTable');
+  if (!table) return;
+
+  // Event delegation for sortable headers
+  table.addEventListener('click', (e) => {
+    const header = e.target.closest('[data-sortable]');
+    if (!header) return;
+
+    const column = header.dataset.sortable;
+    sortAgentTable(column);
+  });
+}
+
+/**
+ * Sort agent table by column
+ */
+function sortAgentTable(column) {
+  // Toggle direction if same column
+  if (currentSort.column === column) {
+    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSort.column = column;
+    currentSort.direction = 'asc';
+  }
+
+  // Sort array
+  const sorted = [...agentTableData].sort((a, b) => {
+    let aVal, bVal;
+
+    // Handle agent_name specially (built from firstname + lastname)
+    if (column === 'agent_name') {
+      aVal = `${a.firstname} ${a.lastname}`;
+      bVal = `${b.firstname} ${b.lastname}`;
+    } else {
+      aVal = a[column];
+      bVal = b[column];
+    }
+
+    // Handle numbers vs strings
+    const isNumber = typeof aVal === 'number';
+    const comparison = isNumber
+      ? aVal - bVal
+      : String(aVal).localeCompare(String(bVal));
+
+    return currentSort.direction === 'asc' ? comparison : -comparison;
+  });
+
+  // Re-render with sorted data
+  renderAgentTable(sorted);
+}
+
+/**
+ * Update sort direction indicators
+ */
+function updateSortIndicators() {
+  document.querySelectorAll('[data-sortable]').forEach(header => {
+    const arrow = header.querySelector('.sort-arrow');
+    if (!arrow) return;
+
+    if (header.dataset.sortable === currentSort.column) {
+      arrow.textContent = currentSort.direction === 'asc' ? ' ↑' : ' ↓';
+      header.setAttribute('aria-sort', currentSort.direction === 'asc' ? 'ascending' : 'descending');
+    } else {
+      arrow.textContent = ' ↕';
+      header.removeAttribute('aria-sort');
+    }
+  });
+}
+
+/**
+ * Show error message
+ */
+function showError(message) {
+  console.error(message);
+  const content = document.getElementById('statsContent');
+  if (content) {
+    content.innerHTML = `<div class="text-red-600 p-4">${message}</div>`;
+  }
 }
 
 /**
@@ -500,6 +653,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (statusDropdown) {
     statusDropdown.addEventListener('change', handleStatusChange);
   }
+
+  // Initialize table sorting
+  initTableSorting();
 
   // Navigation handlers
   const dashboardIcon = document.getElementById('side-dashboard-icon');
