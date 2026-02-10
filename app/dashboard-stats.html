@@ -232,9 +232,66 @@
           <div id="date-error" class="mt-2 text-red-600 text-sm hidden"></div>
         </div>
 
-        <!-- Stats content -->
-        <div id="statsContent">
-          <p class="text-gray-500">Real-time stats will appear here once implemented in Phase 4.</p>
+        <!-- Loading Spinner -->
+        <div id="statsLoading" class="flex items-center justify-center py-12" role="status" aria-label="Loading statistics">
+          <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="ml-3 text-gray-600">Loading stats...</span>
+        </div>
+
+        <!-- Stats Cards -->
+        <div id="statsCards" class="hidden">
+          <div id="statsContent">
+            <p class="text-gray-500">Real-time stats will appear here once implemented in Phase 4.</p>
+          </div>
+        </div>
+
+        <!-- Per-Agent Breakdown Table -->
+        <div id="agentBreakdownContainer" class="hidden mt-8">
+          <h2 class="text-xl font-semibold text-gray-900 mb-4">Agent Breakdown</h2>
+          <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+            <table id="agentBreakdownTable" class="w-full">
+              <thead class="bg-gray-100 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition"
+                      data-sortable="agent_name" aria-label="Sort by agent name">
+                    Agent Name
+                    <span class="sort-arrow ml-1">↕</span>
+                  </th>
+                  <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition"
+                      data-sortable="total_calls" aria-label="Sort by total calls">
+                    Calls
+                    <span class="sort-arrow ml-1">↕</span>
+                  </th>
+                  <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition"
+                      data-sortable="answered_calls" aria-label="Sort by answered calls">
+                    Answered
+                    <span class="sort-arrow ml-1">↕</span>
+                  </th>
+                  <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition"
+                      data-sortable="avg_duration" aria-label="Sort by average duration">
+                    Avg Duration
+                    <span class="sort-arrow ml-1">↕</span>
+                  </th>
+                  <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition"
+                      data-sortable="total_tasks" aria-label="Sort by total tasks">
+                    Tasks
+                    <span class="sort-arrow ml-1">↕</span>
+                  </th>
+                  <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition"
+                      data-sortable="completed_tasks" aria-label="Sort by completed tasks">
+                    Completed
+                    <span class="sort-arrow ml-1">↕</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="agentTableBody">
+                <!-- Populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- SSE Debug Info (temporary - remove in Phase 4) -->

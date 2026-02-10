@@ -265,27 +265,27 @@ function updateStatsDisplay(taskStats, callStats, activityStats) {
 
   content.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Total Calls metric card">
         <h3 class="text-sm font-medium text-gray-500">Total Calls</h3>
         <p class="text-2xl font-bold text-gray-900 mt-2">${totalCalls}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Answered Calls metric card">
         <h3 class="text-sm font-medium text-gray-500">Answered Calls</h3>
         <p class="text-2xl font-bold text-green-600 mt-2">${answeredCalls}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Total Tasks metric card">
         <h3 class="text-sm font-medium text-gray-500">Total Tasks</h3>
         <p class="text-2xl font-bold text-gray-900 mt-2">${totalTasks}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Completed Tasks metric card">
         <h3 class="text-sm font-medium text-gray-500">Completed Tasks</h3>
         <p class="text-2xl font-bold text-blue-600 mt-2">${completedTasks}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Hours Online metric card">
         <h3 class="text-sm font-medium text-gray-500">Hours Online</h3>
         <p class="text-2xl font-bold text-purple-600 mt-2">${Number(hoursOnline).toFixed(1)}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Active Call Time metric card">
         <h3 class="text-sm font-medium text-gray-500">Active Call Time</h3>
         <p class="text-2xl font-bold text-orange-600 mt-2">${Number(activeCallHours).toFixed(1)} hrs</p>
       </div>
