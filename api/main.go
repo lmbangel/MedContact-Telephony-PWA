@@ -327,6 +327,7 @@ func main() {
 		r.Get("/tasks", statsHandler.GetTaskStats)
 		r.Get("/calls", statsHandler.GetCallStats)
 		r.Get("/activity", statsHandler.GetActivityStats)
+		r.Get("/agents", statsHandler.GetAgentBreakdown)
 	})
 
 	port := os.Getenv("PORT")
