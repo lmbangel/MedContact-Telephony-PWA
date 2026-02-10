@@ -815,3 +815,401 @@ SELECT
     COALESCE(SUM(duration_seconds) / 3600.0, 0) as hours_online,
     COALESCE(SUM(CASE WHEN status = 'on-call' THEN duration_seconds ELSE 0 END) / 3600.0, 0) as active_call_hours
 FROM time_blocks;
+
+-- -----------------------
+-- Per-Agent Breakdown Queries
+-- -----------------------
+
+-- name: GetCallStatsByAgentForCompanyToday :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id AND DATE(t.created_at) = CURDATE()
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForCompanyYesterday :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id AND DATE(t.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForCompanyThisWeek :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id
+    AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+    AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForCompanyThisMonth :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id
+    AND YEAR(t.created_at) = YEAR(CURDATE())
+    AND MONTH(t.created_at) = MONTH(CURDATE())
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForCompanyRange :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id
+    AND t.created_at >= ?
+    AND t.created_at < ?
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForCompanyToday :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to AND DATE(t.created_at) = CURDATE()
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForCompanyYesterday :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to AND DATE(t.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForCompanyThisWeek :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to
+    AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+    AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForCompanyThisMonth :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to
+    AND YEAR(t.created_at) = YEAR(CURDATE())
+    AND MONTH(t.created_at) = MONTH(CURDATE())
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForCompanyRange :many
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to
+    AND t.created_at >= ?
+    AND t.created_at < ?
+WHERE u.company_id = ? AND u.is_active = 1
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForManagerToday :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id AND DATE(t.created_at) = CURDATE()
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForManagerYesterday :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id AND DATE(t.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForManagerThisWeek :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id
+    AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+    AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForManagerThisMonth :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id
+    AND YEAR(t.created_at) = YEAR(CURDATE())
+    AND MONTH(t.created_at) = MONTH(CURDATE())
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetCallStatsByAgentForManagerRange :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_calls,
+    COUNT(CASE WHEN t.call_status = 'completed' THEN 1 END) as answered_calls,
+    COUNT(CASE WHEN t.call_status IN ('no-answer', 'busy', 'failed') THEN 1 END) as missed_calls,
+    COALESCE(AVG(CASE WHEN t.duration > 0 THEN t.duration END), 0) as avg_duration
+FROM users u
+LEFT JOIN transcriptions t ON u.id = t.agent_id
+    AND t.created_at >= ?
+    AND t.created_at < ?
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForManagerToday :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to AND DATE(t.created_at) = CURDATE()
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForManagerYesterday :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to AND DATE(t.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForManagerThisWeek :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to
+    AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+    AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForManagerThisMonth :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to
+    AND YEAR(t.created_at) = YEAR(CURDATE())
+    AND MONTH(t.created_at) = MONTH(CURDATE())
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
+
+-- name: GetTaskStatsByAgentForManagerRange :many
+WITH RECURSIVE subordinates AS (
+    SELECT u.id FROM users u WHERE u.reports_to = ? AND u.company_id = ? AND u.is_active = 1
+    UNION ALL
+    SELECT u.id FROM users u INNER JOIN subordinates s ON u.reports_to = s.id WHERE u.company_id = ? AND u.is_active = 1
+)
+SELECT
+    u.id as agent_id,
+    u.firstname,
+    u.lastname,
+    u.agent_id as agent_identifier,
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+FROM users u
+LEFT JOIN tasks t ON u.id = t.assigned_to
+    AND t.created_at >= ?
+    AND t.created_at < ?
+WHERE u.id IN (SELECT id FROM subordinates)
+GROUP BY u.id, u.firstname, u.lastname, u.agent_id
+ORDER BY u.firstname ASC, u.lastname ASC;
