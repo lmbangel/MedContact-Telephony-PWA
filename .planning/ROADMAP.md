@@ -89,10 +89,11 @@ Plans:
   5. Role-based filters work correctly (company/agent dropdowns)
   6. Loading states display during data fetch
   7. Stats page follows existing Tailwind CSS patterns
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD during plan-phase
+- [ ] 04-01-PLAN.md — Per-agent breakdown API endpoint with role-based filtering
+- [ ] 04-02-PLAN.md — Dashboard UI with loading states and sortable agent table
 
 ### Phase 5: Chart Visualization
 **Goal**: Trend charts display metrics over time with real-time updates
