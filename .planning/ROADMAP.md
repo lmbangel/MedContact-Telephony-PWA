@@ -105,10 +105,11 @@ Plans:
   3. Charts update incrementally via SSE (no full recreation)
   4. Chart memory usage stays stable over 4-hour session
   5. Charts are responsive and render correctly on mobile
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD during plan-phase
+- [ ] 05-01-PLAN.md — Chart infrastructure with Chart.js CDN and memory-safe initialization
+- [ ] 05-02-PLAN.md — Real-time chart updates via time filters and SSE integration
 
 ### Phase 6: Export & Polish
 **Goal**: Users can export stats to CSV and dashboard is production-ready
