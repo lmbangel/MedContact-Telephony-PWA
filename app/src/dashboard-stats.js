@@ -424,6 +424,7 @@ async function loadStatsForCompany(companyId) {
   // Store company ID for use in fetchStats
   currentCompanyId = companyId;
   await fetchStats();
+  fetchAndUpdateCharts('today');
 }
 
 /**
@@ -702,21 +703,25 @@ function setupTimeFilterListeners() {
   document.getElementById('filter-today')?.addEventListener('click', () => {
     setActiveFilter('today');
     fetchStats();
+    fetchAndUpdateCharts('today');
   });
 
   document.getElementById('filter-yesterday')?.addEventListener('click', () => {
     setActiveFilter('yesterday');
     fetchStats();
+    fetchAndUpdateCharts('yesterday');
   });
 
   document.getElementById('filter-this-week')?.addEventListener('click', () => {
     setActiveFilter('this_week');
     fetchStats();
+    fetchAndUpdateCharts('this_week');
   });
 
   document.getElementById('filter-this-month')?.addEventListener('click', () => {
     setActiveFilter('this_month');
     fetchStats();
+    fetchAndUpdateCharts('this_month');
   });
 
   // Custom date range handler
@@ -742,6 +747,7 @@ function setupTimeFilterListeners() {
     errorEl.classList.add('hidden');
     setActiveFilter('custom', startDate, endDate);
     fetchStats();
+    fetchAndUpdateCharts('custom', startDate, endDate);
   });
 }
 
@@ -766,6 +772,7 @@ async function initializeStatsPage() {
   } else {
     // For other roles, load stats immediately
     await fetchStats();
+    fetchAndUpdateCharts('today');
   }
 
   // Setup SSE listeners
@@ -884,7 +891,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize charts
   initializeCharts();
-  loadPlaceholderChartData();
+  fetchAndUpdateCharts('today');
 
   // Navigation handlers
   const dashboardIcon = document.getElementById('side-dashboard-icon');
