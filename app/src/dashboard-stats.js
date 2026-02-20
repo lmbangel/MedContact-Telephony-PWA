@@ -15,6 +15,99 @@ let currentFilter = {
 // Prevent concurrent fetches
 let isFetching = false;
 
+// Chart instances (created once, never recreated)
+let callVolumeChart = null;
+let agentPerformanceChart = null;
+
+// Chart configuration
+const MAX_CHART_DATA_POINTS = 100;
+
+/**
+ * Initialize charts with memory-safe patterns
+ */
+function initializeCharts() {
+  const volumeContainer = document.getElementById('callVolumeChart');
+  if (volumeContainer && !callVolumeChart) {
+    const canvas = document.createElement('canvas');
+    volumeContainer.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+
+    callVolumeChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Call Volume',
+          data: [],
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.05)',
+          tension: 0.1,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: { enabled: true, mode: 'index', intersect: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString(); } } }
+        }
+      }
+    });
+    setupChartResize(callVolumeChart, volumeContainer);
+  }
+
+  const perfContainer = document.getElementById('agentPerformanceChart');
+  if (perfContainer && !agentPerformanceChart) {
+    const canvas = document.createElement('canvas');
+    perfContainer.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+
+    agentPerformanceChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Total Calls', data: [], backgroundColor: '#2563eb' },
+          { label: 'Answered Calls', data: [], backgroundColor: '#10b981' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: { enabled: true, mode: 'index', intersect: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString(); } } }
+        }
+      }
+    });
+    setupChartResize(agentPerformanceChart, perfContainer);
+  }
+}
+
+let resizeThrottleId = null;
+function setupChartResize(chart, container) {
+  const resizeObserver = new ResizeObserver(() => {
+    if (resizeThrottleId) cancelAnimationFrame(resizeThrottleId);
+    resizeThrottleId = requestAnimationFrame(() => { chart.resize(); });
+  });
+  resizeObserver.observe(container);
+}
+
+function cleanupCharts() {
+  if (callVolumeChart) { callVolumeChart.destroy(); callVolumeChart = null; }
+  if (agentPerformanceChart) { agentPerformanceChart.destroy(); agentPerformanceChart = null; }
+  if (resizeThrottleId) { cancelAnimationFrame(resizeThrottleId); resizeThrottleId = null; }
+}
+
 /**
  * Fetch company by ID
  */
@@ -564,6 +657,7 @@ async function initializeStatsPage() {
 function cleanup() {
   console.log('Page unloading - cleaning up SSE connection');
   sseService.disconnect();
+  cleanupCharts();
 }
 
 /**
@@ -656,6 +750,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize table sorting
   initTableSorting();
+
+  // Initialize charts
+  initializeCharts();
 
   // Navigation handlers
   const dashboardIcon = document.getElementById('side-dashboard-icon');
