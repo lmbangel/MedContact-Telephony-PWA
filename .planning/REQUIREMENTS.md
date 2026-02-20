@@ -54,7 +54,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **DISP-01**: Summary cards showing key metrics
 - [x] **DISP-02**: Per-agent breakdown table
-- [ ] **DISP-03**: Trend charts showing metrics over time
+- [x] **DISP-03**: Trend charts showing metrics over time
 
 ### Real-Time
 
@@ -127,7 +127,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TIME-03 | Phase 3 | Complete |
 | DISP-01 | Phase 4 | Complete |
 | DISP-02 | Phase 4 | Complete |
-| DISP-03 | Phase 5 | Pending |
+| DISP-03 | Phase 5 | Complete |
 | EXPRT-01 | Phase 6 | Pending |
 
 **Coverage:**
@@ -137,4 +137,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-11 after Phase 4 completion*
+*Last updated: 2026-02-20 after Phase 5 completion*
