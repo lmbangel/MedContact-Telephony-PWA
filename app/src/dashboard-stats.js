@@ -109,6 +109,32 @@ function cleanupCharts() {
 }
 
 /**
+ * Load placeholder chart data for initial display
+ */
+function loadPlaceholderChartData() {
+  if (callVolumeChart) {
+    const now = new Date();
+    const labels = [];
+    const data = [];
+    for (let i = 9; i >= 0; i--) {
+      const time = new Date(now - i * 15 * 60 * 1000);
+      labels.push(time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      data.push(Math.floor(Math.random() * 20) + 5);
+    }
+    callVolumeChart.data.labels = labels;
+    callVolumeChart.data.datasets[0].data = data;
+    callVolumeChart.update('none');
+  }
+
+  if (agentPerformanceChart) {
+    agentPerformanceChart.data.labels = ['Alice Smith', 'Bob Johnson', 'Carol Williams', 'David Brown'];
+    agentPerformanceChart.data.datasets[0].data = [42, 38, 51, 29];
+    agentPerformanceChart.data.datasets[1].data = [39, 35, 48, 26];
+    agentPerformanceChart.update('none');
+  }
+}
+
+/**
  * Fetch company by ID
  */
 async function fetchCompany(companyId) {
@@ -753,6 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize charts
   initializeCharts();
+  loadPlaceholderChartData();
 
   // Navigation handlers
   const dashboardIcon = document.getElementById('side-dashboard-icon');
