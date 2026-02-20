@@ -240,6 +240,39 @@ function distributeDataAcrossLabels(total, count) {
 }
 
 /**
+ * Handle SSE chart update message
+ * Bounded windowing: push new data, shift old if over limit
+ */
+function handleSSEChartUpdate(data) {
+  if (!data || !data.chart_update) return;
+  const update = data.chart_update;
+
+  if (update.timestamp && update.call_count !== undefined && callVolumeChart) {
+    const timestamp = new Date(update.timestamp);
+    const timeLabel = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    callVolumeChart.data.labels.push(timeLabel);
+    callVolumeChart.data.datasets[0].data.push(update.call_count);
+
+    // Bounded windowing
+    if (callVolumeChart.data.labels.length > MAX_CHART_DATA_POINTS) {
+      callVolumeChart.data.labels.shift();
+      callVolumeChart.data.datasets[0].data.shift();
+    }
+
+    callVolumeChart.update('none');
+  }
+
+  if (update.agent_stats && agentPerformanceChart) {
+    const agents = update.agent_stats;
+    agentPerformanceChart.data.labels = agents.map(a => `${a.first_name} ${a.last_name}`.trim());
+    agentPerformanceChart.data.datasets[0].data = agents.map(a => a.total_calls || 0);
+    agentPerformanceChart.data.datasets[1].data = agents.map(a => a.answered_calls || 0);
+    agentPerformanceChart.update('none');
+  }
+}
+
+/**
  * Fetch company by ID
  */
 async function fetchCompany(companyId) {
@@ -326,7 +359,7 @@ function handleSSEMessage(data) {
     console.log('Heartbeat received');
   } else if (data.type === 'stats') {
     console.log('Stats update received:', data);
-    // Future: Update stats display here (Phase 4)
+    handleSSEChartUpdate(data);
   }
 }
 
