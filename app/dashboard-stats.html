@@ -7,6 +7,7 @@
   <title>Stats - MedContact</title>
   <link rel="icon" href="/app/favicon.ico" type="image/x-icon">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module" src="/src/dashboard-stats.js"></script>
 </head>
 
@@ -245,6 +246,25 @@
         <div id="statsCards" class="hidden">
           <div id="statsContent">
             <p class="text-gray-500">Real-time stats will appear here once implemented in Phase 4.</p>
+          </div>
+        </div>
+
+        <!-- Chart Visualizations -->
+        <div id="chartsContainer" class="mt-8 space-y-6">
+          <h2 class="text-xl font-semibold text-gray-900">Trends</h2>
+
+          <!-- Call Volume Line Chart -->
+          <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Call Volume Over Time</h3>
+            <div id="callVolumeChart" class="w-full h-80" role="img" aria-label="Call volume trend chart">
+            </div>
+          </div>
+
+          <!-- Agent Performance Bar Chart -->
+          <div class="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Agent Performance</h3>
+            <div id="agentPerformanceChart" class="w-full h-80" role="img" aria-label="Agent performance comparison chart">
+            </div>
           </div>
         </div>
 
