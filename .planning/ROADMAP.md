@@ -121,10 +121,10 @@ Plans:
   3. Export processing happens client-side (zero server load)
   4. Offline indicator displays when SSE disconnects
   5. Timezone indicator shows what timezone times are displayed in
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 06-01: TBD during plan-phase
+- [ ] 06-01-PLAN.md — CSV export with RFC 4180 escaping, timezone badge, and production polish
 
 ## Progress
 
@@ -138,4 +138,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Core Metrics & Time Filtering | 4/4 | Complete | 2026-02-09 |
 | 4. Dashboard UI & Summary Cards | 2/2 | Complete | 2026-02-10 |
 | 5. Chart Visualization | 2/2 | Complete | 2026-02-20 |
-| 6. Export & Polish | 0/TBD | Not started | - |
+| 6. Export & Polish | 0/1 | Not started | - |
