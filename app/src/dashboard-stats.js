@@ -268,7 +268,7 @@ async function fetchAndUpdateCharts(filterType, startDate, endDate) {
     if (callData.success && callData.stats && callVolumeChart) {
       const timeLabels = generateTimeLabels(filterType);
       const callDataPoints = distributeDataAcrossLabels(
-        callData.stats.total_calls || 0,
+        safeNum(callData.stats.total_calls),
         timeLabels.length
       );
 
@@ -458,6 +458,8 @@ function handleSSEMessage(data) {
   } else if (data.type === 'stats') {
     console.log('Stats update received:', data);
     handleSSEChartUpdate(data);
+    // Refresh summary cards and agent table on stats update
+    fetchStats();
   }
 }
 
@@ -623,42 +625,47 @@ let currentCompanyId = null;
 /**
  * Update stats display
  */
+function safeNum(val) {
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
+}
+
 function updateStatsDisplay(taskStats, callStats, activityStats) {
   const content = document.getElementById('statsContent');
 
-  // Handle different stat structures based on role
-  const totalCalls = callStats.total_calls || 0;
-  const totalTasks = taskStats.total_tasks || 0;
-  const answeredCalls = callStats.answered_calls || 0;
-  const completedTasks = taskStats.completed_tasks || 0;
-  const hoursOnline = activityStats?.hours_online || 0;
-  const activeCallHours = activityStats?.active_call_hours || 0;
+  // Handle different stat structures based on role — guard against NaN
+  const totalCalls = safeNum(callStats.total_calls);
+  const totalTasks = safeNum(taskStats.total_tasks);
+  const answeredCalls = safeNum(callStats.answered_calls);
+  const completedTasks = safeNum(taskStats.completed_tasks);
+  const hoursOnline = safeNum(activityStats?.hours_online);
+  const activeCallHours = safeNum(activityStats?.active_call_hours);
 
   content.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Total Calls metric card">
-        <h3 class="text-sm font-medium text-gray-500">Total Calls</h3>
-        <p class="text-2xl font-bold text-gray-900 mt-2">${totalCalls}</p>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Total Calls metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Total Calls</h3>
+        <p class="text-2xl font-bold text-gray-900">${totalCalls}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Answered Calls metric card">
-        <h3 class="text-sm font-medium text-gray-500">Answered Calls</h3>
-        <p class="text-2xl font-bold text-green-600 mt-2">${answeredCalls}</p>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Answered Calls metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Answered Calls</h3>
+        <p class="text-2xl font-bold text-green-600">${answeredCalls}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Total Tasks metric card">
-        <h3 class="text-sm font-medium text-gray-500">Total Tasks</h3>
-        <p class="text-2xl font-bold text-gray-900 mt-2">${totalTasks}</p>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Total Tasks metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Total Tasks</h3>
+        <p class="text-2xl font-bold text-gray-900">${totalTasks}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Completed Tasks metric card">
-        <h3 class="text-sm font-medium text-gray-500">Completed Tasks</h3>
-        <p class="text-2xl font-bold text-blue-600 mt-2">${completedTasks}</p>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Completed Tasks metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Completed Tasks</h3>
+        <p class="text-2xl font-bold text-[#1e3a5f]">${completedTasks}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Hours Online metric card">
-        <h3 class="text-sm font-medium text-gray-500">Hours Online</h3>
-        <p class="text-2xl font-bold text-purple-600 mt-2">${Number(hoursOnline).toFixed(1)}</p>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Hours Online metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Hours Online</h3>
+        <p class="text-2xl font-bold text-orange-500">${hoursOnline.toFixed(1)}</p>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border border-gray-200" aria-label="Active Call Time metric card">
-        <h3 class="text-sm font-medium text-gray-500">Active Call Time</h3>
-        <p class="text-2xl font-bold text-orange-600 mt-2">${Number(activeCallHours).toFixed(1)} hrs</p>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Active Call Time metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Active Call Time</h3>
+        <p class="text-2xl font-bold text-green-500">${activeCallHours.toFixed(1)} hrs</p>
       </div>
     </div>
   `;
@@ -681,15 +688,19 @@ function renderAgentTable(agents) {
   tbody.innerHTML = agents
     .map(agent => {
       // Build agent name from firstname and lastname
-      const agentName = `${agent.firstname} ${agent.lastname}`;
+      const agentName = `${agent.firstname || ''} ${agent.lastname || ''}`.trim() || 'Unknown';
+      const totalCalls = agent.total_calls || 0;
+      const answeredCalls = agent.answered_calls || 0;
+      const totalTasks = agent.total_tasks || 0;
+      const completedTasks = agent.completed_tasks || 0;
       return `
       <tr class="border-b border-gray-200 hover:bg-gray-50 transition">
         <td class="px-4 py-3 text-sm text-gray-900">${agentName}</td>
-        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${agent.total_calls}</td>
-        <td class="px-4 py-3 text-right text-sm text-green-600">${agent.answered_calls}</td>
+        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${totalCalls}</td>
+        <td class="px-4 py-3 text-right text-sm text-green-600">${answeredCalls}</td>
         <td class="px-4 py-3 text-right text-sm text-gray-600">${formatDuration(agent.avg_duration)}</td>
-        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${agent.total_tasks}</td>
-        <td class="px-4 py-3 text-right text-sm text-blue-600">${agent.completed_tasks}</td>
+        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${totalTasks}</td>
+        <td class="px-4 py-3 text-right text-sm text-[#1e3a5f]">${completedTasks}</td>
       </tr>
     `;
     })
@@ -702,9 +713,10 @@ function renderAgentTable(agents) {
  * Format duration from seconds to MM:SS
  */
 function formatDuration(seconds) {
-  if (!seconds || seconds === 0) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
+  const val = safeNum(seconds);
+  if (val === 0) return '0:00';
+  const mins = Math.floor(val / 60);
+  const secs = Math.floor(val % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
@@ -806,10 +818,10 @@ function setActiveFilter(filterType, startDate = null, endDate = null) {
       if (btnId === `filter-${filterType.replace('_', '-')}`) {
         // Active state
         btn.classList.remove('border-gray-300', 'bg-white', 'text-gray-700');
-        btn.classList.add('border-blue-600', 'bg-blue-600', 'text-white');
+        btn.classList.add('border-[#1e3a5f]', 'bg-[#1e3a5f]', 'text-white');
       } else {
         // Inactive state
-        btn.classList.remove('border-blue-600', 'bg-blue-600', 'text-white');
+        btn.classList.remove('border-[#1e3a5f]', 'bg-[#1e3a5f]', 'text-white');
         btn.classList.add('border-gray-300', 'bg-white', 'text-gray-700');
       }
     }
