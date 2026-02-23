@@ -63,7 +63,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Export
 
-- [ ] **EXPRT-01**: CSV download of current stats view
+- [x] **EXPRT-01**: CSV download of current stats view
 
 ## v2 Requirements
 
@@ -128,7 +128,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DISP-01 | Phase 4 | Complete |
 | DISP-02 | Phase 4 | Complete |
 | DISP-03 | Phase 5 | Complete |
-| EXPRT-01 | Phase 6 | Pending |
+| EXPRT-01 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 28 total
@@ -137,4 +137,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-20 after Phase 5 completion*
+*Last updated: 2026-02-23 after Phase 6 completion*

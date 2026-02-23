@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Core Metrics & Time Filtering** - Stats aggregation for calls, tasks, outcomes, activity
 - [x] **Phase 4: Dashboard UI & Summary Cards** - Basic stats page with key metrics display
 - [x] **Phase 5: Chart Visualization** - Trend charts with incremental updates
-- [ ] **Phase 6: Export & Polish** - CSV export and final enhancements
+- [x] **Phase 6: Export & Polish** - CSV export and final enhancements
 
 ## Phase Details
 
@@ -124,7 +124,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — CSV export with RFC 4180 escaping, timezone badge, and production polish
+- [x] 06-01-PLAN.md — CSV export with RFC 4180 escaping, timezone badge, and production polish
 
 ## Progress
 
@@ -138,4 +138,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Core Metrics & Time Filtering | 4/4 | Complete | 2026-02-09 |
 | 4. Dashboard UI & Summary Cards | 2/2 | Complete | 2026-02-10 |
 | 5. Chart Visualization | 2/2 | Complete | 2026-02-20 |
-| 6. Export & Polish | 0/1 | Not started | - |
+| 6. Export & Polish | 1/1 | Complete | 2026-02-23 |
