@@ -5,6 +5,110 @@ import { API_URL } from './config.js';
 // Last heartbeat timestamp
 let lastHeartbeatTime = null;
 
+/**
+ * Escape CSV field according to RFC 4180
+ */
+function escapeCSVField(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+/**
+ * Export agent stats as CSV file
+ */
+function exportStatsAsCSV() {
+  try {
+    const agentTableBody = document.getElementById('agentTableBody');
+    if (!agentTableBody || agentTableBody.children.length === 0) {
+      alert('No agent data to export');
+      return;
+    }
+
+    const agents = [];
+    agentTableBody.querySelectorAll('tr').forEach(row => {
+      const cells = row.querySelectorAll('td');
+      if (cells.length >= 6) {
+        agents.push({
+          'Agent Name': cells[0].textContent.trim(),
+          'Total Calls': cells[1].textContent.trim(),
+          'Answered Calls': cells[2].textContent.trim(),
+          'Avg Duration': cells[3].textContent.trim(),
+          'Total Tasks': cells[4].textContent.trim(),
+          'Completed Tasks': cells[5].textContent.trim()
+        });
+      }
+    });
+
+    if (agents.length === 0) {
+      alert('No valid agent rows to export');
+      return;
+    }
+
+    // Build CSV with RFC 4180 escaping
+    const headers = Object.keys(agents[0]);
+    const headerRow = headers.map(h => escapeCSVField(h)).join(',');
+    const dataRows = agents.map(agent =>
+      headers.map(h => escapeCSVField(agent[h])).join(',')
+    );
+
+    // UTF-8 BOM for Excel + CRLF line endings (RFC 4180)
+    const csv = '\ufeff' + [headerRow, ...dataRows].join('\r\n');
+
+    // Download via Blob
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    const date = new Date().toISOString().split('T')[0];
+    const filter = currentFilter.type || 'custom';
+    link.setAttribute('download', `agent-stats-${filter}-${date}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // CRITICAL: cleanup object URL to prevent memory leak
+    URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error('Export failed:', error);
+    alert('Export failed: ' + error.message);
+  }
+}
+
+/**
+ * Display user's timezone in header
+ */
+function displayTimezone() {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const container = document.getElementById('timezone-display');
+    if (!container) return;
+
+    // Extract region for display: "America/New_York" -> "New York"
+    const [, region] = timezone.split('/');
+    const displayName = region ? region.replace(/_/g, ' ') : timezone;
+
+    container.innerHTML = `
+      <div class="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-xs text-gray-600" title="Timezone for all times displayed: ${timezone}">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>${displayName}</span>
+      </div>
+    `;
+  } catch (error) {
+    console.warn('Could not detect timezone:', error);
+    // Graceful degradation: don't display badge if Intl fails
+  }
+}
+
 // Time filter state
 let currentFilter = {
   type: 'today',
@@ -347,15 +451,9 @@ async function updateAgentStatus(status) {
 function handleSSEMessage(data) {
   console.log('SSE Message:', data);
 
-  // Update debug panel
-  const debugHeartbeat = document.getElementById('debug-heartbeat');
-  if (debugHeartbeat) {
-    lastHeartbeatTime = new Date();
-    debugHeartbeat.textContent = lastHeartbeatTime.toLocaleTimeString();
-  }
-
-  // Handle different message types
+  // Track heartbeat time
   if (data.type === 'heartbeat') {
+    lastHeartbeatTime = new Date();
     console.log('Heartbeat received');
   } else if (data.type === 'stats') {
     console.log('Stats update received:', data);
@@ -369,18 +467,8 @@ function handleSSEMessage(data) {
 function updateConnectionStatus(status, reconnectAttempts = 0) {
   const indicator = document.getElementById('sse-status-indicator');
   const statusText = document.getElementById('sse-status-text');
-  const debugStatus = document.getElementById('debug-status');
-  const debugAttempts = document.getElementById('debug-attempts');
 
   if (!indicator || !statusText) return;
-
-  // Update debug panel
-  if (debugStatus) {
-    debugStatus.textContent = status;
-  }
-  if (debugAttempts) {
-    debugAttempts.textContent = reconnectAttempts;
-  }
 
   // Update visual indicator
   switch (status) {
@@ -918,6 +1006,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (statusDropdown) {
     statusDropdown.addEventListener('change', handleStatusChange);
   }
+
+  // Export button handler
+  const exportBtn = document.getElementById('export-stats-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportStatsAsCSV);
+  }
+
+  // Display timezone badge
+  displayTimezone();
 
   // Initialize table sorting
   initTableSorting();
