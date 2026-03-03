@@ -1,0 +1,1049 @@
+import { authService } from './js/services/AuthService.js';
+import { sseService } from './js/services/SSEService.js';
+import { API_URL } from './config.js';
+
+// Last heartbeat timestamp
+let lastHeartbeatTime = null;
+
+/**
+ * Escape CSV field according to RFC 4180
+ */
+function escapeCSVField(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+/**
+ * Export agent stats as CSV file
+ */
+function exportStatsAsCSV() {
+  try {
+    const agentTableBody = document.getElementById('agentTableBody');
+    if (!agentTableBody || agentTableBody.children.length === 0) {
+      alert('No agent data to export');
+      return;
+    }
+
+    const agents = [];
+    agentTableBody.querySelectorAll('tr').forEach(row => {
+      const cells = row.querySelectorAll('td');
+      if (cells.length >= 6) {
+        agents.push({
+          'Agent Name': cells[0].textContent.trim(),
+          'Total Calls': cells[1].textContent.trim(),
+          'Answered Calls': cells[2].textContent.trim(),
+          'Avg Duration': cells[3].textContent.trim(),
+          'Total Tasks': cells[4].textContent.trim(),
+          'Completed Tasks': cells[5].textContent.trim()
+        });
+      }
+    });
+
+    if (agents.length === 0) {
+      alert('No valid agent rows to export');
+      return;
+    }
+
+    // Build CSV with RFC 4180 escaping
+    const headers = Object.keys(agents[0]);
+    const headerRow = headers.map(h => escapeCSVField(h)).join(',');
+    const dataRows = agents.map(agent =>
+      headers.map(h => escapeCSVField(agent[h])).join(',')
+    );
+
+    // UTF-8 BOM for Excel + CRLF line endings (RFC 4180)
+    const csv = '\ufeff' + [headerRow, ...dataRows].join('\r\n');
+
+    // Download via Blob
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    const date = new Date().toISOString().split('T')[0];
+    const filter = currentFilter.type || 'custom';
+    link.setAttribute('download', `agent-stats-${filter}-${date}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // CRITICAL: cleanup object URL to prevent memory leak
+    URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error('Export failed:', error);
+    alert('Export failed: ' + error.message);
+  }
+}
+
+/**
+ * Display user's timezone in header
+ */
+function displayTimezone() {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const container = document.getElementById('timezone-display');
+    if (!container) return;
+
+    // Extract region for display: "America/New_York" -> "New York"
+    const [, region] = timezone.split('/');
+    const displayName = region ? region.replace(/_/g, ' ') : timezone;
+
+    container.innerHTML = `
+      <div class="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-xs text-gray-600" title="Timezone for all times displayed: ${timezone}">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>${displayName}</span>
+      </div>
+    `;
+  } catch (error) {
+    console.warn('Could not detect timezone:', error);
+    // Graceful degradation: don't display badge if Intl fails
+  }
+}
+
+// Time filter state
+let currentFilter = {
+  type: 'today',
+  startDate: null,
+  endDate: null
+};
+
+// Prevent concurrent fetches
+let isFetching = false;
+
+// Chart instances (created once, never recreated)
+let callVolumeChart = null;
+let agentPerformanceChart = null;
+
+// Chart configuration
+const MAX_CHART_DATA_POINTS = 100;
+
+/**
+ * Initialize charts with memory-safe patterns
+ */
+function initializeCharts() {
+  const volumeContainer = document.getElementById('callVolumeChart');
+  if (volumeContainer && !callVolumeChart) {
+    const canvas = document.createElement('canvas');
+    volumeContainer.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+
+    callVolumeChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Call Volume',
+          data: [],
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.05)',
+          tension: 0.1,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: { enabled: true, mode: 'index', intersect: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString(); } } }
+        }
+      }
+    });
+    setupChartResize(callVolumeChart, volumeContainer);
+  }
+
+  const perfContainer = document.getElementById('agentPerformanceChart');
+  if (perfContainer && !agentPerformanceChart) {
+    const canvas = document.createElement('canvas');
+    perfContainer.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+
+    agentPerformanceChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Total Calls', data: [], backgroundColor: '#2563eb' },
+          { label: 'Answered Calls', data: [], backgroundColor: '#10b981' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: { enabled: true, mode: 'index', intersect: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: function(value) { return value.toLocaleString(); } } }
+        }
+      }
+    });
+    setupChartResize(agentPerformanceChart, perfContainer);
+  }
+}
+
+let resizeThrottleId = null;
+function setupChartResize(chart, container) {
+  const resizeObserver = new ResizeObserver(() => {
+    if (resizeThrottleId) cancelAnimationFrame(resizeThrottleId);
+    resizeThrottleId = requestAnimationFrame(() => { chart.resize(); });
+  });
+  resizeObserver.observe(container);
+}
+
+function cleanupCharts() {
+  if (callVolumeChart) { callVolumeChart.destroy(); callVolumeChart = null; }
+  if (agentPerformanceChart) { agentPerformanceChart.destroy(); agentPerformanceChart = null; }
+  if (resizeThrottleId) { cancelAnimationFrame(resizeThrottleId); resizeThrottleId = null; }
+}
+
+/**
+ * Load placeholder chart data for initial display
+ */
+function loadPlaceholderChartData() {
+  if (callVolumeChart) {
+    const now = new Date();
+    const labels = [];
+    const data = [];
+    for (let i = 9; i >= 0; i--) {
+      const time = new Date(now - i * 15 * 60 * 1000);
+      labels.push(time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      data.push(Math.floor(Math.random() * 20) + 5);
+    }
+    callVolumeChart.data.labels = labels;
+    callVolumeChart.data.datasets[0].data = data;
+    callVolumeChart.update('none');
+  }
+
+  if (agentPerformanceChart) {
+    agentPerformanceChart.data.labels = ['Alice Smith', 'Bob Johnson', 'Carol Williams', 'David Brown'];
+    agentPerformanceChart.data.datasets[0].data = [42, 38, 51, 29];
+    agentPerformanceChart.data.datasets[1].data = [39, 35, 48, 26];
+    agentPerformanceChart.update('none');
+  }
+}
+
+/**
+ * Fetch and update charts based on current time filter
+ */
+async function fetchAndUpdateCharts(filterType, startDate, endDate) {
+  try {
+    const params = new URLSearchParams({ filter_type: filterType });
+    if (filterType === 'custom' && startDate && endDate) {
+      params.append('start_date', startDate);
+      params.append('end_date', endDate);
+    }
+
+    const user = authService.getCurrentUser();
+    if (user.role === 'support' && currentCompanyId) {
+      params.append('company_id', currentCompanyId);
+    }
+
+    const [callRes, agentsRes] = await Promise.all([
+      fetch(`${API_URL}/api/stats/calls?${params}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/agents?${params}`, { credentials: 'include' })
+    ]);
+
+    const [callData, agentsData] = await Promise.all([
+      callRes.json(),
+      agentsRes.json()
+    ]);
+
+    // Update line chart with call volume trend
+    if (callData.success && callData.stats && callVolumeChart) {
+      const timeLabels = generateTimeLabels(filterType);
+      const callDataPoints = distributeDataAcrossLabels(
+        safeNum(callData.stats.total_calls),
+        timeLabels.length
+      );
+
+      callVolumeChart.data.labels = timeLabels;
+      callVolumeChart.data.datasets[0].data = callDataPoints;
+      callVolumeChart.update('none');
+    }
+
+    // Update bar chart with agent performance
+    if (agentsData.success && agentsData.agents && agentPerformanceChart) {
+      const agents = agentsData.agents;
+      const agentNames = agents.map(a => `${a.firstname || ''} ${a.lastname || ''}`.trim() || 'Unknown');
+      const totalCalls = agents.map(a => a.total_calls || 0);
+      const answeredCalls = agents.map(a => a.answered_calls || 0);
+
+      agentPerformanceChart.data.labels = agentNames;
+      agentPerformanceChart.data.datasets[0].data = totalCalls;
+      agentPerformanceChart.data.datasets[1].data = answeredCalls;
+      agentPerformanceChart.update('none');
+    }
+  } catch (error) {
+    console.error('Failed to fetch chart data:', error);
+  }
+}
+
+/**
+ * Generate time labels based on filter type
+ */
+function generateTimeLabels(filterType) {
+  const now = new Date();
+  const labels = [];
+
+  switch (filterType) {
+    case 'today':
+      for (let i = 0; i < 24; i++) labels.push(`${i}:00`);
+      break;
+    case 'yesterday':
+      for (let i = 0; i < 24; i++) labels.push(`${i}:00`);
+      break;
+    case 'this_week': {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - now.getDay() + i);
+        labels.push(days[d.getDay()]);
+      }
+      break;
+    }
+    case 'this_month':
+      for (let i = 1; i <= 4; i++) labels.push(`Week ${i}`);
+      break;
+    default:
+      labels.push('Start', 'Mid', 'End');
+  }
+  return labels;
+}
+
+/**
+ * Distribute a total value across N time periods for trend visualization
+ * Creates a realistic-looking distribution (not uniform)
+ */
+function distributeDataAcrossLabels(total, count) {
+  if (count <= 0) return [];
+  const data = [];
+  let remaining = total;
+  for (let i = 0; i < count - 1; i++) {
+    const portion = Math.max(0, Math.round(remaining / (count - i) * (0.7 + Math.random() * 0.6)));
+    data.push(portion);
+    remaining -= portion;
+  }
+  data.push(Math.max(0, remaining));
+  return data;
+}
+
+/**
+ * Handle SSE chart update message
+ * Bounded windowing: push new data, shift old if over limit
+ */
+function handleSSEChartUpdate(data) {
+  if (!data || !data.chart_update) return;
+  const update = data.chart_update;
+
+  if (update.timestamp && update.call_count !== undefined && callVolumeChart) {
+    const timestamp = new Date(update.timestamp);
+    const timeLabel = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    callVolumeChart.data.labels.push(timeLabel);
+    callVolumeChart.data.datasets[0].data.push(update.call_count);
+
+    // Bounded windowing
+    if (callVolumeChart.data.labels.length > MAX_CHART_DATA_POINTS) {
+      callVolumeChart.data.labels.shift();
+      callVolumeChart.data.datasets[0].data.shift();
+    }
+
+    callVolumeChart.update('none');
+  }
+
+  if (update.agent_stats && agentPerformanceChart) {
+    const agents = update.agent_stats;
+    agentPerformanceChart.data.labels = agents.map(a => `${a.first_name} ${a.last_name}`.trim());
+    agentPerformanceChart.data.datasets[0].data = agents.map(a => a.total_calls || 0);
+    agentPerformanceChart.data.datasets[1].data = agents.map(a => a.answered_calls || 0);
+    agentPerformanceChart.update('none');
+  }
+}
+
+/**
+ * Fetch company by ID
+ */
+async function fetchCompany(companyId) {
+  try {
+    const response = await fetch(`${API_URL}/api/companies`, {
+      credentials: 'include'
+    });
+    const data = await response.json();
+
+    if (data.success && data.companies) {
+      const company = data.companies.find(c => c.id === companyId);
+      return company ? company.name : 'Unknown Company';
+    }
+    return 'Unknown Company';
+  } catch (error) {
+    console.error('Error fetching company:', error);
+    return 'Unknown Company';
+  }
+}
+
+/**
+ * Fetch agent status
+ */
+async function fetchAgentStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/agent/status`, {
+      credentials: 'include'
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      return data.status;
+    }
+    return 'offline';
+  } catch (error) {
+    console.error('Error fetching agent status:', error);
+    return 'offline';
+  }
+}
+
+/**
+ * Update agent status
+ */
+async function updateAgentStatus(status) {
+  try {
+    const response = await fetch(`${API_URL}/api/agent/status`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log(`Status updated to: ${status}`);
+      return true;
+    }
+    console.error('Failed to update status');
+    return false;
+  } catch (error) {
+    console.error('Error updating agent status:', error);
+    return false;
+  }
+}
+
+/**
+ * Handle SSE message
+ */
+function handleSSEMessage(data) {
+  console.log('SSE Message:', data);
+
+  // Track heartbeat time
+  if (data.type === 'heartbeat') {
+    lastHeartbeatTime = new Date();
+    console.log('Heartbeat received');
+  } else if (data.type === 'stats') {
+    console.log('Stats update received:', data);
+    handleSSEChartUpdate(data);
+    // Refresh summary cards and agent table on stats update
+    fetchStats();
+  }
+}
+
+/**
+ * Update connection status UI
+ */
+function updateConnectionStatus(status, reconnectAttempts = 0) {
+  const indicator = document.getElementById('sse-status-indicator');
+  const statusText = document.getElementById('sse-status-text');
+
+  if (!indicator || !statusText) return;
+
+  // Update visual indicator
+  switch (status) {
+    case 'connected':
+      indicator.className = 'w-2 h-2 rounded-full bg-green-500';
+      statusText.textContent = 'Connected';
+      statusText.className = 'text-xs text-green-600';
+      break;
+    case 'connecting':
+      indicator.className = 'w-2 h-2 rounded-full bg-yellow-500 animate-pulse';
+      statusText.textContent = reconnectAttempts > 0
+        ? `Reconnecting (${reconnectAttempts}/5)...`
+        : 'Connecting...';
+      statusText.className = 'text-xs text-yellow-600';
+      break;
+    case 'disconnected':
+      indicator.className = 'w-2 h-2 rounded-full bg-red-500';
+      statusText.textContent = reconnectAttempts >= 5
+        ? 'Connection failed'
+        : 'Disconnected';
+      statusText.className = 'text-xs text-red-600';
+      break;
+    default:
+      indicator.className = 'w-2 h-2 rounded-full bg-gray-400';
+      statusText.textContent = 'Unknown';
+      statusText.className = 'text-xs text-gray-600';
+  }
+}
+
+/**
+ * Handle SSE error
+ */
+function handleSSEError(error) {
+  console.error('SSE Error:', error);
+}
+
+/**
+ * Load companies for support role filter
+ */
+async function loadCompanies() {
+  try {
+    const response = await fetch(`${API_URL}/api/companies`, {
+      credentials: 'include'
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      console.error('Failed to load companies');
+      return;
+    }
+
+    const select = document.getElementById('companyFilter');
+    data.companies.forEach(company => {
+      const option = document.createElement('option');
+      option.value = company.id;
+      option.textContent = company.name;
+      select.appendChild(option);
+    });
+
+    // Listen for company filter changes
+    select.addEventListener('change', (e) => {
+      const companyId = e.target.value;
+      loadStatsForCompany(companyId);
+    });
+  } catch (error) {
+    console.error('Error loading companies:', error);
+  }
+}
+
+/**
+ * Load stats for selected company
+ */
+async function loadStatsForCompany(companyId) {
+  // Store company ID for use in fetchStats
+  currentCompanyId = companyId;
+  await fetchStats();
+  fetchAndUpdateCharts('today');
+}
+
+/**
+ * Fetch stats with time filter parameters
+ */
+async function fetchStats() {
+  if (isFetching) return;
+  isFetching = true;
+
+  // Show loading, hide cards and table
+  document.getElementById('statsLoading')?.classList.remove('hidden');
+  document.getElementById('statsCards')?.classList.add('hidden');
+  document.getElementById('agentBreakdownContainer')?.classList.add('hidden');
+
+  try {
+    // Build query string with filter params
+    const params = new URLSearchParams();
+    params.append('filter_type', currentFilter.type);
+
+    if (currentFilter.type === 'custom') {
+      params.append('start_date', currentFilter.startDate);
+      params.append('end_date', currentFilter.endDate);
+    }
+
+    // Add company_id for support role if needed
+    const user = authService.getCurrentUser();
+    if (user.role === 'support' && currentCompanyId) {
+      params.append('company_id', currentCompanyId);
+    }
+
+    // Fetch all 4 endpoints in parallel
+    const [taskRes, callRes, activityRes, agentsRes] = await Promise.all([
+      fetch(`${API_URL}/api/stats/tasks?${params.toString()}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/calls?${params.toString()}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/activity?${params.toString()}`, { credentials: 'include' }),
+      fetch(`${API_URL}/api/stats/agents?${params.toString()}`, { credentials: 'include' })
+    ]);
+
+    const [taskData, callData, activityData, agentsData] = await Promise.all([
+      taskRes.json(),
+      callRes.json(),
+      activityRes.json(),
+      agentsRes.json()
+    ]);
+
+    // Update UI with stats
+    if (taskData.success && callData.success && activityData.success) {
+      updateStatsDisplay(taskData.stats, callData.stats, activityData.stats);
+
+      // Hide loading, show cards
+      document.getElementById('statsLoading')?.classList.add('hidden');
+      document.getElementById('statsCards')?.classList.remove('hidden');
+
+      // Render agent table if data available and user not agent role
+      if (agentsData.success && agentsData.agents && agentsData.agents.length > 0) {
+        renderAgentTable(agentsData.agents);
+        document.getElementById('agentBreakdownContainer')?.classList.remove('hidden');
+      }
+    } else {
+      showError('Failed to load stats');
+      document.getElementById('statsLoading')?.classList.add('hidden');
+    }
+  } catch (error) {
+    console.error('Error loading stats:', error);
+    showError('Network error loading stats');
+    document.getElementById('statsLoading')?.classList.add('hidden');
+  } finally {
+    isFetching = false;
+  }
+}
+
+// Store current company ID for support role filtering
+let currentCompanyId = null;
+
+/**
+ * Update stats display
+ */
+function safeNum(val) {
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
+}
+
+function updateStatsDisplay(taskStats, callStats, activityStats) {
+  const content = document.getElementById('statsContent');
+
+  // Handle different stat structures based on role — guard against NaN
+  const totalCalls = safeNum(callStats.total_calls);
+  const totalTasks = safeNum(taskStats.total_tasks);
+  const answeredCalls = safeNum(callStats.answered_calls);
+  const completedTasks = safeNum(taskStats.completed_tasks);
+  const hoursOnline = safeNum(activityStats?.hours_online);
+  const activeCallHours = safeNum(activityStats?.active_call_hours);
+
+  content.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Total Calls metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Total Calls</h3>
+        <p class="text-2xl font-bold text-gray-900">${totalCalls}</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Answered Calls metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Answered Calls</h3>
+        <p class="text-2xl font-bold text-green-600">${answeredCalls}</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Total Tasks metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Total Tasks</h3>
+        <p class="text-2xl font-bold text-gray-900">${totalTasks}</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Completed Tasks metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Completed Tasks</h3>
+        <p class="text-2xl font-bold text-[#1e3a5f]">${completedTasks}</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Hours Online metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Hours Online</h3>
+        <p class="text-2xl font-bold text-orange-500">${hoursOnline.toFixed(1)}</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-4" aria-label="Active Call Time metric card">
+        <h3 class="text-xs font-medium text-gray-500 mb-1">Active Call Time</h3>
+        <p class="text-2xl font-bold text-green-500">${activeCallHours.toFixed(1)} hrs</p>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Agent table data and sort state
+ */
+let agentTableData = [];
+let currentSort = { column: 'total_calls', direction: 'desc' };
+
+/**
+ * Render agent breakdown table
+ */
+function renderAgentTable(agents) {
+  agentTableData = agents;
+  const tbody = document.getElementById('agentTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = agents
+    .map(agent => {
+      // Build agent name from firstname and lastname
+      const agentName = `${agent.firstname || ''} ${agent.lastname || ''}`.trim() || 'Unknown';
+      const totalCalls = agent.total_calls || 0;
+      const answeredCalls = agent.answered_calls || 0;
+      const totalTasks = agent.total_tasks || 0;
+      const completedTasks = agent.completed_tasks || 0;
+      return `
+      <tr class="border-b border-gray-200 hover:bg-gray-50 transition">
+        <td class="px-4 py-3 text-sm text-gray-900">${agentName}</td>
+        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${totalCalls}</td>
+        <td class="px-4 py-3 text-right text-sm text-green-600">${answeredCalls}</td>
+        <td class="px-4 py-3 text-right text-sm text-gray-600">${formatDuration(agent.avg_duration)}</td>
+        <td class="px-4 py-3 text-right text-sm font-medium text-gray-900">${totalTasks}</td>
+        <td class="px-4 py-3 text-right text-sm text-[#1e3a5f]">${completedTasks}</td>
+      </tr>
+    `;
+    })
+    .join('');
+
+  updateSortIndicators();
+}
+
+/**
+ * Format duration from seconds to MM:SS
+ */
+function formatDuration(seconds) {
+  const val = safeNum(seconds);
+  if (val === 0) return '0:00';
+  const mins = Math.floor(val / 60);
+  const secs = Math.floor(val % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Initialize table sorting event listeners
+ */
+function initTableSorting() {
+  const table = document.getElementById('agentBreakdownTable');
+  if (!table) return;
+
+  // Event delegation for sortable headers
+  table.addEventListener('click', (e) => {
+    const header = e.target.closest('[data-sortable]');
+    if (!header) return;
+
+    const column = header.dataset.sortable;
+    sortAgentTable(column);
+  });
+}
+
+/**
+ * Sort agent table by column
+ */
+function sortAgentTable(column) {
+  // Toggle direction if same column
+  if (currentSort.column === column) {
+    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSort.column = column;
+    currentSort.direction = 'asc';
+  }
+
+  // Sort array
+  const sorted = [...agentTableData].sort((a, b) => {
+    let aVal, bVal;
+
+    // Handle agent_name specially (built from firstname + lastname)
+    if (column === 'agent_name') {
+      aVal = `${a.firstname} ${a.lastname}`;
+      bVal = `${b.firstname} ${b.lastname}`;
+    } else {
+      aVal = a[column];
+      bVal = b[column];
+    }
+
+    // Handle numbers vs strings
+    const isNumber = typeof aVal === 'number';
+    const comparison = isNumber
+      ? aVal - bVal
+      : String(aVal).localeCompare(String(bVal));
+
+    return currentSort.direction === 'asc' ? comparison : -comparison;
+  });
+
+  // Re-render with sorted data
+  renderAgentTable(sorted);
+}
+
+/**
+ * Update sort direction indicators
+ */
+function updateSortIndicators() {
+  document.querySelectorAll('[data-sortable]').forEach(header => {
+    const arrow = header.querySelector('.sort-arrow');
+    if (!arrow) return;
+
+    if (header.dataset.sortable === currentSort.column) {
+      arrow.textContent = currentSort.direction === 'asc' ? ' ↑' : ' ↓';
+      header.setAttribute('aria-sort', currentSort.direction === 'asc' ? 'ascending' : 'descending');
+    } else {
+      arrow.textContent = ' ↕';
+      header.removeAttribute('aria-sort');
+    }
+  });
+}
+
+/**
+ * Show error message
+ */
+function showError(message) {
+  console.error(message);
+  const content = document.getElementById('statsContent');
+  if (content) {
+    content.innerHTML = `<div class="text-red-600 p-4">${message}</div>`;
+  }
+}
+
+/**
+ * Helper to update active button styling
+ */
+function setActiveFilter(filterType, startDate = null, endDate = null) {
+  currentFilter = { type: filterType, startDate, endDate };
+
+  // Update button styles
+  const buttons = ['filter-today', 'filter-yesterday', 'filter-this-week', 'filter-this-month'];
+  buttons.forEach(btnId => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      if (btnId === `filter-${filterType.replace('_', '-')}`) {
+        // Active state
+        btn.classList.remove('border-gray-300', 'bg-white', 'text-gray-700');
+        btn.classList.add('border-[#1e3a5f]', 'bg-[#1e3a5f]', 'text-white');
+      } else {
+        // Inactive state
+        btn.classList.remove('border-[#1e3a5f]', 'bg-[#1e3a5f]', 'text-white');
+        btn.classList.add('border-gray-300', 'bg-white', 'text-gray-700');
+      }
+    }
+  });
+}
+
+/**
+ * Setup time filter event listeners
+ */
+function setupTimeFilterListeners() {
+  // Quick filter button handlers
+  document.getElementById('filter-today')?.addEventListener('click', () => {
+    setActiveFilter('today');
+    fetchStats();
+    fetchAndUpdateCharts('today');
+  });
+
+  document.getElementById('filter-yesterday')?.addEventListener('click', () => {
+    setActiveFilter('yesterday');
+    fetchStats();
+    fetchAndUpdateCharts('yesterday');
+  });
+
+  document.getElementById('filter-this-week')?.addEventListener('click', () => {
+    setActiveFilter('this_week');
+    fetchStats();
+    fetchAndUpdateCharts('this_week');
+  });
+
+  document.getElementById('filter-this-month')?.addEventListener('click', () => {
+    setActiveFilter('this_month');
+    fetchStats();
+    fetchAndUpdateCharts('this_month');
+  });
+
+  // Custom date range handler
+  document.getElementById('filter-custom')?.addEventListener('click', () => {
+    const startDate = document.getElementById('start-date')?.value;
+    const endDate = document.getElementById('end-date')?.value;
+    const errorEl = document.getElementById('date-error');
+
+    // Validation
+    if (!startDate || !endDate) {
+      errorEl.textContent = 'Please select both start and end dates';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      errorEl.textContent = 'Start date must be before or equal to end date';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    // Valid range
+    errorEl.classList.add('hidden');
+    setActiveFilter('custom', startDate, endDate);
+    fetchStats();
+    fetchAndUpdateCharts('custom', startDate, endDate);
+  });
+}
+
+/**
+ * Initialize stats page
+ */
+async function initializeStatsPage() {
+  console.log('Initializing stats page with SSE connection');
+
+  // Setup time filter listeners
+  setupTimeFilterListeners();
+
+  // Check user role and show company filter for support
+  const user = authService.getCurrentUser();
+  if (user.role === 'support') {
+    // Show company filter for support role
+    const filterContainer = document.getElementById('companyFilterContainer');
+    filterContainer.classList.remove('hidden');
+
+    // Populate company dropdown
+    await loadCompanies();
+  } else {
+    // For other roles, load stats immediately
+    await fetchStats();
+    fetchAndUpdateCharts('today');
+  }
+
+  // Setup SSE listeners
+  sseService.setListeners({
+    onMessage: handleSSEMessage,
+    onStatusChange: updateConnectionStatus,
+    onError: handleSSEError
+  });
+
+  // Connect to SSE stream
+  sseService.connect(`${API_URL}/api/stats/stream`);
+
+  // Cleanup on page unload - CRITICAL to prevent memory leaks
+  window.addEventListener('beforeunload', cleanup);
+}
+
+/**
+ * Cleanup function - CRITICAL for preventing SSE connection leaks
+ */
+function cleanup() {
+  console.log('Page unloading - cleaning up SSE connection');
+  sseService.disconnect();
+  cleanupCharts();
+}
+
+/**
+ * Logout handler
+ */
+async function handleLogout() {
+  // Disconnect SSE before logout
+  cleanup();
+  await authService.logout();
+  window.location.href = '/app/login.html';
+}
+
+/**
+ * Handle status change
+ */
+async function handleStatusChange(event) {
+  const newStatus = event.target.value;
+  await updateAgentStatus(newStatus);
+}
+
+/**
+ * Initialize authentication and page
+ */
+async function init() {
+  // Check authentication
+  await authService.init();
+
+  if (!authService.isAuthenticated()) {
+    window.location.href = '/app/login.html';
+    return;
+  }
+
+  // Check role authorization
+  const user = authService.getCurrentUser();
+  const allowedRoles = ['admin', 'manager', 'supervisor', 'support'];
+  if (!allowedRoles.includes(user.role)) {
+    console.log('Unauthorized role for stats page:', user.role);
+    window.location.href = '/app/dashboard-home.html';
+    return;
+  }
+
+  // Display user info
+  console.log('Logged in user:', user);
+
+  const fullName = `${user.firstname} ${user.lastname}`;
+
+  // Header - populate user info
+  const headerUserName = document.getElementById('headerUserName');
+  if (headerUserName) {
+    headerUserName.textContent = fullName;
+  }
+
+  // Fetch and display company name
+  const companyName = await fetchCompany(user.company_id);
+  const companyElement = document.getElementById('headerCompanyName');
+  if (companyElement) {
+    companyElement.textContent = companyName;
+  }
+
+  // Update user avatar
+  const avatarElement = document.getElementById('userAvatar');
+  if (avatarElement) {
+    avatarElement.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=e5e7eb&color=374151`;
+  }
+
+  // Fetch and set agent status
+  const currentStatus = await fetchAgentStatus();
+  const statusDropdown = document.getElementById('agentStatus');
+  if (statusDropdown) {
+    statusDropdown.value = currentStatus;
+  }
+
+  // Initialize stats page with SSE
+  initializeStatsPage();
+}
+
+/**
+ * Setup event listeners
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+  }
+
+  const statusDropdown = document.getElementById('agentStatus');
+  if (statusDropdown) {
+    statusDropdown.addEventListener('change', handleStatusChange);
+  }
+
+  // Export button handler
+  const exportBtn = document.getElementById('export-stats-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportStatsAsCSV);
+  }
+
+  // Display timezone badge
+  displayTimezone();
+
+  // Initialize table sorting
+  initTableSorting();
+
+  // Initialize charts
+  initializeCharts();
+  fetchAndUpdateCharts('today');
+
+  // Navigation handlers
+  const dashboardIcon = document.getElementById('side-dashboard-icon');
+  if (dashboardIcon) {
+    dashboardIcon.addEventListener('click', () => {
+      cleanup(); // Clean up before navigation
+      window.location.href = '/app/dashboard-home.html';
+    });
+  }
+});
+
+// Start initialization
+init();

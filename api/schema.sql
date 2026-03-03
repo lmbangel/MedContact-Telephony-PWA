@@ -118,6 +118,10 @@ CREATE TABLE IF NOT EXISTS transcriptions (
     INDEX idx_call_sid (call_sid),
     INDEX idx_call_status (call_status),
     INDEX idx_created_at (created_at),
+    -- Composite index for time-filtered call queries (company + date range)
+    INDEX idx_transcriptions_company_created (company_id, created_at) COMMENT 'For filtering calls by company and date range',
+    -- Composite index for time-filtered call queries (agent + date range)
+    INDEX idx_transcriptions_agent_created (agent_id, created_at) COMMENT 'For filtering calls by agent and date range',
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     FOREIGN KEY (agent_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
@@ -157,6 +161,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     INDEX idx_call_id (call_id),
     INDEX idx_status (status),
     INDEX idx_due_date (due_date),
+    -- Composite index for time-filtered task queries (assigned_to + date range)
+    INDEX idx_tasks_assigned_created (assigned_to, created_at) COMMENT 'For filtering tasks by assignee and date range',
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     FOREIGN KEY (call_id) REFERENCES transcriptions(id) ON DELETE SET NULL

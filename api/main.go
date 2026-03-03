@@ -14,6 +14,8 @@ import (
 
 	// "net/smtp" // Uncomment when using SMTP email sending
 	"omnicall/db"
+	"omnicall/handlers"
+	customMiddleware "omnicall/middleware"
 	"os"
 	"strings"
 	"time"
@@ -217,6 +219,12 @@ func main() {
 	queries := db.New(database)
 	server := &Server{db: database, queries: queries}
 
+	// Create SSE server for real-time stats streaming
+	sseServer := handlers.NewSSEServer(queries)
+
+	// Create stats handler for role-based stats endpoints
+	statsHandler := handlers.NewStatsHandler(queries)
+
 	// Setup router
 	r := chi.NewRouter()
 
@@ -263,8 +271,12 @@ func main() {
 	r.Post("/api/auth/otp/verify", server.verifyOTP)
 
 	// Company routes
-	r.Get("/api/companies", server.getCompanies)
-	r.Post("/api/companies", server.createCompany)
+	r.Route("/api/companies", func(r chi.Router) {
+		// GET - all authenticated users can read companies (for header display)
+		r.Get("/", server.getCompanies)
+		// POST - only admin/support can create companies
+		r.With(customMiddleware.RequireRole(queries, "admin", "support")).Post("/", server.createCompany)
+	})
 
 	// Customer routes
 	r.Get("/api/customers", server.getCustomers)
@@ -303,6 +315,21 @@ func main() {
 	r.Post("/twilio/dequeue-dial", server.handleDequeueDial)
 	r.Get("/twilio/dequeue-dial", server.handleDequeueDial)
 
+	// Stats SSE endpoint (role-protected)
+	r.Group(func(r chi.Router) {
+		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support"))
+		r.Get("/api/stats/stream", sseServer.HandleStatsStream)
+	})
+
+	// Stats endpoints (role-based)
+	r.Route("/api/stats", func(r chi.Router) {
+		r.Use(customMiddleware.RequireRole(queries, "admin", "manager", "supervisor", "support", "agent"))
+		r.Get("/tasks", statsHandler.GetTaskStats)
+		r.Get("/calls", statsHandler.GetCallStats)
+		r.Get("/activity", statsHandler.GetActivityStats)
+		r.Get("/agents", statsHandler.GetAgentBreakdown)
+	})
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8000"
@@ -312,7 +339,8 @@ func main() {
 	fmt.Println("📊 Health check: http://localhost:" + port + "/api/health")
 	fmt.Println("🔐 Auth API: http://localhost:" + port + "/api/auth")
 	fmt.Println("🏢 Companies API: http://localhost:" + port + "/api/companies")
-	fmt.Println("📞 Twilio API: http://localhost:" + port + "/api/twilio\n")
+	fmt.Println("📞 Twilio API: http://localhost:" + port + "/api/twilio")
+	fmt.Println("📊 Stats SSE: http://localhost:" + port + "/api/stats/stream\n")
 
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
@@ -559,6 +587,7 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 			Lastname:  user.Lastname,
 			AgentID:   user.AgentID,
 			CompanyID: user.CompanyID,
+			Role:      user.Role,
 		},
 	})
 }
